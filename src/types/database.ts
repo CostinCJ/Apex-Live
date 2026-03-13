@@ -83,6 +83,7 @@ export interface Database {
           units?: string;
           updated_at?: string;
         };
+        Relationships: [];
       };
       workouts: {
         Row: {
@@ -132,6 +133,7 @@ export interface Database {
           notes?: string | null;
           updated_at?: string;
         };
+        Relationships: [];
       };
       workout_metrics: {
         Row: {
@@ -164,6 +166,7 @@ export interface Database {
           recorded_at?: string;
           metadata?: Json | null;
         };
+        Relationships: [];
       };
       workout_metrics_downsampled: {
         Row: {
@@ -202,6 +205,7 @@ export interface Database {
           max_value?: number;
           sample_count?: number;
         };
+        Relationships: [];
       };
       personal_records: {
         Row: {
@@ -239,6 +243,7 @@ export interface Database {
           workout_id?: string | null;
           previous_value?: number | null;
         };
+        Relationships: [];
       };
       coach_conversations: {
         Row: {
@@ -273,6 +278,7 @@ export interface Database {
           message_count?: number;
           updated_at?: string;
         };
+        Relationships: [];
       };
       coach_messages: {
         Row: {
@@ -301,6 +307,7 @@ export interface Database {
           audio_duration_ms?: number | null;
           metadata?: Json | null;
         };
+        Relationships: [];
       };
       daily_workout_summaries: {
         Row: {
@@ -341,8 +348,10 @@ export interface Database {
           workout_types?: Json;
           updated_at?: string;
         };
+        Relationships: [];
       };
     };
+    Views: Record<string, never>;
     Functions: {
       get_previous_workout: {
         Args: {
@@ -384,6 +393,7 @@ export interface Database {
       metric_type: MetricTypeEnum;
       conversation_role: ConversationRoleEnum;
     };
+    CompositeTypes: Record<string, never>;
   };
 }
 

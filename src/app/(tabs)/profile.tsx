@@ -1,13 +1,15 @@
-import { View, Text, StyleSheet, Pressable, Switch } from 'react-native';
+import { View, Text, StyleSheet, Pressable, Switch, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from '@/theme/colors';
 import { spacing, touchTarget, borderRadius } from '@/theme/spacing';
 import { typography } from '@/theme/typography';
 import { useSettingsStore } from '@/stores/settingsStore';
 import { useAuthContext } from '@/features/auth/context/AuthContext';
+import { useAccountDeletion } from '@/features/profile/hooks/useAccountDeletion';
 
 export default function ProfileScreen() {
   const { user, signOut } = useAuthContext();
+  const { requestDeletion, deleting } = useAccountDeletion();
   const units = useSettingsStore((s) => s.units);
   const setUnits = useSettingsStore((s) => s.setUnits);
   const hapticFeedback = useSettingsStore((s) => s.hapticFeedback);
@@ -79,17 +81,35 @@ export default function ProfileScreen() {
           </View>
         </View>
 
-        <Pressable
-          style={({ pressed }) => [
-            styles.signOutButton,
-            pressed && styles.signOutPressed,
-          ]}
-          onPress={signOut}
-          accessibilityRole="button"
-          accessibilityLabel="Sign out"
-        >
-          <Text style={styles.signOutText}>Sign Out</Text>
-        </Pressable>
+        <View style={styles.dangerZone}>
+          <Pressable
+            style={({ pressed }) => [
+              styles.signOutButton,
+              pressed && styles.signOutPressed,
+            ]}
+            onPress={signOut}
+            accessibilityRole="button"
+            accessibilityLabel="Sign out"
+          >
+            <Text style={styles.signOutText}>Sign Out</Text>
+          </Pressable>
+
+          <Pressable
+            style={({ pressed }) => [
+              styles.deleteButton,
+              pressed && styles.signOutPressed,
+              deleting && styles.deleteButtonDisabled,
+            ]}
+            onPress={requestDeletion}
+            disabled={deleting}
+            accessibilityRole="button"
+            accessibilityLabel="Delete account"
+          >
+            <Text style={styles.deleteText}>
+              {deleting ? 'Deleting...' : 'Delete Account'}
+            </Text>
+          </Pressable>
+        </View>
       </View>
     </SafeAreaView>
   );
@@ -139,6 +159,10 @@ const styles = StyleSheet.create({
     color: colors.primary,
     textTransform: 'capitalize',
   },
+  dangerZone: {
+    marginTop: 'auto' as const,
+    gap: spacing.sm,
+  },
   signOutButton: {
     backgroundColor: colors.error + '20',
     borderRadius: borderRadius.md,
@@ -148,7 +172,6 @@ const styles = StyleSheet.create({
     minHeight: touchTarget.standard,
     borderWidth: 1,
     borderColor: colors.error + '40',
-    marginTop: 'auto' as const,
   },
   signOutPressed: {
     opacity: 0.7,
@@ -156,5 +179,19 @@ const styles = StyleSheet.create({
   signOutText: {
     ...typography.button,
     color: colors.error,
+  },
+  deleteButton: {
+    backgroundColor: 'transparent',
+    borderRadius: borderRadius.md,
+    padding: spacing.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  deleteButtonDisabled: {
+    opacity: 0.5,
+  },
+  deleteText: {
+    ...typography.caption,
+    color: colors.textTertiary,
   },
 });

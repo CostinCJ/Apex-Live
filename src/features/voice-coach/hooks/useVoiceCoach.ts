@@ -152,7 +152,7 @@ export function useVoiceCoach() {
 
     return buildSystemPrompt(
       {
-        fitnessLevel: settings.fitnessLevel,
+        fitnessLevel: settings.fitnessLevel ?? 'intermediate',
         coachingStyle: settings.coachStyle,
         verbosity: settings.coachVerbosity,
         units: settings.units,

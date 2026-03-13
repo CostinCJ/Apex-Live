@@ -4,18 +4,24 @@ import {
   WS_KEEPALIVE_INTERVAL,
 } from '@/utils/constants';
 
-export type RealtimeEvent =
-  | { type: 'session.created'; session: { id: string } }
-  | { type: 'session.updated' }
-  | { type: 'input_audio_buffer.speech_started' }
-  | { type: 'input_audio_buffer.speech_stopped' }
-  | { type: 'response.audio.delta'; delta: string }
-  | { type: 'response.audio.done' }
-  | { type: 'response.audio_transcript.delta'; delta: string }
-  | { type: 'response.audio_transcript.done'; transcript: string }
-  | { type: 'conversation.item.input_audio_transcription.completed'; transcript: string }
-  | { type: 'error'; error: { message: string; code?: string } }
-  | { type: string; [key: string]: unknown };
+export interface RealtimeEventMap {
+  'session.created': { session: { id: string } };
+  'session.updated': Record<string, never>;
+  'input_audio_buffer.speech_started': Record<string, never>;
+  'input_audio_buffer.speech_stopped': Record<string, never>;
+  'response.audio.delta': { delta: string };
+  'response.audio.done': Record<string, never>;
+  'response.audio_transcript.delta': { delta: string };
+  'response.audio_transcript.done': { transcript: string };
+  'conversation.item.input_audio_transcription.completed': { transcript: string };
+  'error': { error: { message: string; code?: string } };
+}
+
+export type RealtimeEventType = keyof RealtimeEventMap;
+
+export type RealtimeEvent = {
+  [K in RealtimeEventType]: { type: K } & RealtimeEventMap[K];
+}[RealtimeEventType];
 
 type EventHandler = (event: RealtimeEvent) => void;
 type ConnectionState = 'disconnected' | 'connecting' | 'connected' | 'reconnecting' | 'error';

@@ -1,5 +1,5 @@
-import { Audio } from 'expo-av';
-import * as FileSystem from 'expo-file-system';
+import { Audio, type AVPlaybackStatus } from 'expo-av';
+import { File, Paths } from 'expo-file-system';
 
 export class AudioPlaybackService {
   private currentSound: Audio.Sound | null = null;
@@ -49,22 +49,20 @@ export class AudioPlaybackService {
     this.onSpeakingChange?.(true);
 
     try {
-      // Write base64 audio to a temp file
+      // Write base64 audio to a temp file using new expo-file-system API
       this.fileCounter++;
-      const fileUri = `${FileSystem.cacheDirectory}coach_audio_${this.fileCounter}.wav`;
-      await FileSystem.writeAsStringAsync(fileUri, base64, {
-        encoding: FileSystem.EncodingType.Base64,
-      });
+      const file = new File(Paths.cache, `coach_audio_${this.fileCounter}.wav`);
+      file.write(base64, { encoding: 'base64' });
 
       const { sound } = await Audio.Sound.createAsync(
-        { uri: fileUri },
+        { uri: file.uri },
         { shouldPlay: true },
       );
       this.currentSound = sound;
 
-      sound.setOnPlaybackStatusUpdate((status) => {
+      sound.setOnPlaybackStatusUpdate((status: AVPlaybackStatus) => {
         if (status.isLoaded && status.didJustFinish) {
-          void this.onPlaybackFinished(sound, fileUri);
+          void this.onPlaybackFinished(sound, file);
         }
       });
     } catch (error) {
@@ -75,7 +73,7 @@ export class AudioPlaybackService {
     }
   }
 
-  private async onPlaybackFinished(sound: Audio.Sound, fileUri: string): Promise<void> {
+  private async onPlaybackFinished(sound: Audio.Sound, file: File): Promise<void> {
     try {
       await sound.unloadAsync();
     } catch {
@@ -84,7 +82,7 @@ export class AudioPlaybackService {
 
     // Clean up temp file
     try {
-      await FileSystem.deleteAsync(fileUri, { idempotent: true });
+      file.delete();
     } catch {
       // Ignore cleanup errors
     }

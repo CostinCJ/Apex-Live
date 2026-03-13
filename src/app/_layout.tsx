@@ -6,9 +6,12 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { colors } from '@/theme/colors';
 import { AuthProvider, useAuthContext } from '@/features/auth/context/AuthContext';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { useSettingsStore } from '@/stores/settingsStore';
 
 function RootNavigator() {
   const { session, loading } = useAuthContext();
+  const hasCompletedOnboarding = useSettingsStore((s) => s.hasCompletedOnboarding);
   const segments = useSegments();
   const router = useRouter();
 
@@ -16,13 +19,20 @@ function RootNavigator() {
     if (loading) return;
 
     const inAuthGroup = segments[0] === '(auth)';
+    const inOnboarding = segments[0] === 'onboarding';
 
     if (!session && !inAuthGroup) {
       router.replace('/(auth)/login');
     } else if (session && inAuthGroup) {
-      router.replace('/(tabs)');
+      if (!hasCompletedOnboarding) {
+        router.replace('/onboarding');
+      } else {
+        router.replace('/(tabs)');
+      }
+    } else if (session && !hasCompletedOnboarding && !inOnboarding) {
+      router.replace('/onboarding');
     }
-  }, [session, loading, segments]);
+  }, [session, loading, segments, hasCompletedOnboarding]);
 
   if (loading) {
     return (
@@ -46,6 +56,10 @@ function RootNavigator() {
         options={{ animation: 'fade' }}
       />
       <Stack.Screen
+        name="onboarding"
+        options={{ animation: 'fade', gestureEnabled: false }}
+      />
+      <Stack.Screen
         name="workout/[id]"
         options={{
           presentation: 'fullScreenModal',
@@ -62,9 +76,11 @@ export default function RootLayout() {
     <GestureHandlerRootView style={styles.root}>
       <SafeAreaProvider>
         <StatusBar style="light" />
-        <AuthProvider>
-          <RootNavigator />
-        </AuthProvider>
+        <ErrorBoundary level="root">
+          <AuthProvider>
+            <RootNavigator />
+          </AuthProvider>
+        </ErrorBoundary>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

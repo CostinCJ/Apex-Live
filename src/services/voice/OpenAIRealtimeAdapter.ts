@@ -7,7 +7,7 @@ import type {
   ConnectionStateCallback,
   Unsubscribe,
 } from './IVoiceService';
-import { RealtimeWebSocket, type RealtimeEvent } from './RealtimeWebSocket';
+import { RealtimeWebSocket } from './RealtimeWebSocket';
 import { AudioCaptureService } from './AudioCaptureService';
 import { AudioPlaybackService } from './AudioPlaybackService';
 
@@ -115,15 +115,13 @@ export class OpenAIRealtimeAdapter implements IVoiceService {
       this.connectionStateCallbacks.forEach((cb) => cb(state));
     });
 
-    this.ws.onEvent((event: RealtimeEvent) => {
+    this.ws.onEvent((event) => {
       switch (event.type) {
         case 'conversation.item.input_audio_transcription.completed':
-          // User's speech transcription
           this.transcriptCallbacks.forEach((cb) => cb(event.transcript, true));
           break;
 
         case 'response.audio_transcript.delta':
-          // Coach's response transcript (streaming)
           this.pendingTranscript += event.delta;
           this.transcriptCallbacks.forEach((cb) =>
             cb(this.pendingTranscript, false),
@@ -131,23 +129,19 @@ export class OpenAIRealtimeAdapter implements IVoiceService {
           break;
 
         case 'response.audio_transcript.done':
-          // Coach's response transcript (final)
           this.pendingTranscript = '';
           this.transcriptCallbacks.forEach((cb) => cb(event.transcript, true));
           break;
 
         case 'response.audio.delta':
-          // Audio data for playback
           this.playback.enqueueAudio(event.delta);
           this.audioResponseCallbacks.forEach((cb) => cb(event.delta));
           break;
 
         case 'response.audio.done':
-          // Audio response complete
           break;
 
         case 'input_audio_buffer.speech_started':
-          // User started speaking — interrupt coach playback
           void this.playback.interrupt();
           break;
 
