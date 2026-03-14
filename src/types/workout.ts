@@ -1,12 +1,16 @@
 export type WorkoutType =
-  | 'running'
-  | 'cycling'
-  | 'swimming'
-  | 'strength'
+  | 'push'
+  | 'pull'
+  | 'legs'
+  | 'upper'
+  | 'lower'
+  | 'full_body'
   | 'hiit'
-  | 'yoga'
-  | 'rowing'
-  | 'walking'
+  | 'cardio_run'
+  | 'cardio_cycle'
+  | 'cardio_row'
+  | 'boxing'
+  | 'mobility'
   | 'custom';
 
 export type WorkoutStatus = 'idle' | 'active' | 'paused' | 'completed' | 'abandoned';

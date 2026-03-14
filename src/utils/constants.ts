@@ -1,8 +1,8 @@
 /** Health data polling interval during active workout (ms) */
 export const HEALTH_POLL_INTERVAL_ACTIVE = 5000;
 
-/** Health data polling interval during rest (ms) */
-export const HEALTH_POLL_INTERVAL_REST = 15000;
+/** Health data polling interval during rest (ms) — dev plan specifies 30s */
+export const HEALTH_POLL_INTERVAL_REST = 30000;
 
 /** How often to send updated context to the AI coach (ms) */
 export const COACH_CONTEXT_UPDATE_INTERVAL = 5000;

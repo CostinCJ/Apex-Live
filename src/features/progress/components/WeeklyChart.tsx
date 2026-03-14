@@ -14,6 +14,7 @@ interface WeeklyChartProps {
   maxValue: number;
   unit: string;
   title: string;
+  barColor?: string;
 }
 
 const BAR_HEIGHT = 120;
@@ -23,6 +24,7 @@ export const WeeklyChart = memo(function WeeklyChart({
   maxValue,
   unit,
   title,
+  barColor = colors.primary,
 }: WeeklyChartProps) {
   const safeMax = maxValue > 0 ? maxValue : 1;
 
@@ -44,7 +46,7 @@ export const WeeklyChart = memo(function WeeklyChart({
                     styles.barFill,
                     {
                       height,
-                      backgroundColor: hasValue ? colors.primary : colors.border,
+                      backgroundColor: hasValue ? barColor : colors.border,
                     },
                   ]}
                 />
@@ -65,7 +67,7 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.lg,
     padding: spacing.lg,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.surfaceBorder,
     marginBottom: spacing.lg,
   },
   title: {
@@ -99,7 +101,8 @@ const styles = StyleSheet.create({
   },
   barFill: {
     width: '100%',
-    borderRadius: borderRadius.sm,
+    borderTopLeftRadius: borderRadius.sm,
+    borderTopRightRadius: borderRadius.sm,
     minHeight: 2,
   },
   barLabel: {

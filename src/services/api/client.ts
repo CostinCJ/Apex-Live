@@ -1,4 +1,5 @@
 import * as SecureStore from 'expo-secure-store';
+import { syncQueue } from './SyncQueue';
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:3001';
 
@@ -42,6 +43,8 @@ function notifyAuthListeners(event: 'SIGNED_IN' | 'SIGNED_OUT' | 'TOKEN_REFRESHE
 // ─── Token refresh ──────────────────────────────────────────────────
 
 let refreshPromise: Promise<boolean> | null = null;
+let consecutiveRefreshFailures = 0;
+const MAX_REFRESH_FAILURES = 3;
 
 async function refreshAccessToken(): Promise<boolean> {
   // Deduplicate concurrent refresh attempts
@@ -61,14 +64,23 @@ async function refreshAccessToken(): Promise<boolean> {
       if (!res.ok) {
         await clearTokens();
         notifyAuthListeners('SIGNED_OUT');
+        consecutiveRefreshFailures = 0;
         return false;
       }
 
       const data = (await res.json()) as { accessToken: string; refreshToken: string };
       await setTokens(data.accessToken, data.refreshToken);
       notifyAuthListeners('TOKEN_REFRESHED');
+      consecutiveRefreshFailures = 0;
       return true;
     } catch {
+      // Network error — don't clear tokens immediately (user might be offline)
+      consecutiveRefreshFailures++;
+      if (consecutiveRefreshFailures >= MAX_REFRESH_FAILURES) {
+        await clearTokens();
+        notifyAuthListeners('SIGNED_OUT');
+        consecutiveRefreshFailures = 0;
+      }
       return false;
     } finally {
       refreshPromise = null;
@@ -85,10 +97,16 @@ export interface ApiResponse<T> {
   error: { message: string; status: number } | null;
 }
 
+interface FetchOptions extends RequestInit {
+  /** If true, queue to SyncQueue on network failure for later retry */
+  offlineQueue?: boolean;
+}
+
 async function apiFetch<T>(
   path: string,
-  options: RequestInit = {},
+  options: FetchOptions = {},
 ): Promise<ApiResponse<T>> {
+  const { offlineQueue, ...fetchOptions } = options;
   const token = await getAccessToken();
 
   const headers: Record<string, string> = {
@@ -103,8 +121,17 @@ async function apiFetch<T>(
   let res: Response;
 
   try {
-    res = await fetch(`${API_BASE_URL}${path}`, { ...options, headers });
+    res = await fetch(`${API_BASE_URL}${path}`, { ...fetchOptions, headers });
   } catch {
+    // Queue mutating requests for offline retry
+    if (offlineQueue && fetchOptions.method && fetchOptions.method !== 'GET') {
+      const body = fetchOptions.body ? JSON.parse(fetchOptions.body as string) : undefined;
+      syncQueue.enqueue(
+        path,
+        fetchOptions.method as 'POST' | 'PATCH' | 'PUT' | 'DELETE',
+        body,
+      );
+    }
     return { data: null, error: { message: 'Network error', status: 0 } };
   }
 
@@ -115,7 +142,7 @@ async function apiFetch<T>(
       const newToken = await getAccessToken();
       headers['Authorization'] = `Bearer ${newToken}`;
       try {
-        res = await fetch(`${API_BASE_URL}${path}`, { ...options, headers });
+        res = await fetch(`${API_BASE_URL}${path}`, { ...fetchOptions, headers });
       } catch {
         return { data: null, error: { message: 'Network error', status: 0 } };
       }
@@ -136,25 +163,32 @@ async function apiFetch<T>(
 
 // ─── Public API methods ─────────────────────────────────────────────
 
+interface MutationOptions {
+  offlineQueue?: boolean;
+}
+
 export const api = {
   get: <T>(path: string) => apiFetch<T>(path),
 
-  post: <T>(path: string, body?: unknown) =>
+  post: <T>(path: string, body?: unknown, opts?: MutationOptions) =>
     apiFetch<T>(path, {
       method: 'POST',
       body: body ? JSON.stringify(body) : undefined,
+      offlineQueue: opts?.offlineQueue,
     }),
 
-  patch: <T>(path: string, body?: unknown) =>
+  patch: <T>(path: string, body?: unknown, opts?: MutationOptions) =>
     apiFetch<T>(path, {
       method: 'PATCH',
       body: body ? JSON.stringify(body) : undefined,
+      offlineQueue: opts?.offlineQueue,
     }),
 
-  put: <T>(path: string, body?: unknown) =>
+  put: <T>(path: string, body?: unknown, opts?: MutationOptions) =>
     apiFetch<T>(path, {
       method: 'PUT',
       body: body ? JSON.stringify(body) : undefined,
+      offlineQueue: opts?.offlineQueue,
     }),
 
   delete: <T>(path: string) =>

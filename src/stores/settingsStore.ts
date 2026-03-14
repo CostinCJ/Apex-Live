@@ -38,7 +38,7 @@ interface SettingsActions {
 }
 
 const initialState: SettingsState = {
-  units: 'imperial',
+  units: 'metric',
   hapticFeedback: true,
   hapticIntensity: 'default',
 

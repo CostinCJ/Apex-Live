@@ -18,7 +18,7 @@ export function useAuth() {
 
   useEffect(() => {
     // Get initial session
-    auth.getSession().then(({ data, error }) => {
+    auth.getSession().then(({ data }) => {
       if (data?.user) {
         setState({
           session: { access_token: 'active' },
@@ -31,7 +31,8 @@ export function useAuth() {
           session: null,
           user: null,
           loading: false,
-          error: error?.message ?? null,
+          // Don't show auth errors on initial session check (401 is expected when not logged in)
+          error: null,
         });
       }
     });

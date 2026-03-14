@@ -1,6 +1,6 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { createHealthAdapter } from '@/services/health/HealthAdapter';
-import type { IHealthService } from '@/services/health/IHealthService';
+import type { IHealthService, Unsubscribe } from '@/services/health/IHealthService';
 import type { MetricType, HealthCapabilities } from '@/types/health';
 import { useRealtimeStore } from '@/stores/realtimeStore';
 import { getHeartRateZone } from '@/types/health';
@@ -14,6 +14,7 @@ const OBSERVED_METRICS: MetricType[] = [
 
 export function useHealthData() {
   const serviceRef = useRef<IHealthService | null>(null);
+  const unsubscribeRef = useRef<Unsubscribe | null>(null);
   const [isAvailable, setIsAvailable] = useState(false);
   const [hasPermission, setHasPermission] = useState(false);
   const [capabilities, setCapabilities] = useState<HealthCapabilities | null>(null);
@@ -36,6 +37,10 @@ export function useHealthData() {
     })();
 
     return () => {
+      if (unsubscribeRef.current) {
+        unsubscribeRef.current();
+        unsubscribeRef.current = null;
+      }
       void service.stopObserving();
     };
   }, []);
@@ -49,8 +54,13 @@ export function useHealthData() {
 
     if (!result.granted) return false;
 
+    // Clean up previous subscription before re-subscribing
+    if (unsubscribeRef.current) {
+      unsubscribeRef.current();
+    }
+
     // Subscribe to metric updates
-    service.onMetricUpdate((metric) => {
+    unsubscribeRef.current = service.onMetricUpdate((metric) => {
       switch (metric.type) {
         case 'heart_rate':
           updateHealthMetrics({
@@ -65,6 +75,9 @@ export function useHealthData() {
         case 'steps':
           updateHealthMetrics({ steps: metric.value });
           break;
+        case 'distance':
+          // Forward distance data (store can be extended to include it)
+          break;
       }
     });
 
@@ -73,6 +86,10 @@ export function useHealthData() {
   }, [updateHealthMetrics]);
 
   const stop = useCallback(async () => {
+    if (unsubscribeRef.current) {
+      unsubscribeRef.current();
+      unsubscribeRef.current = null;
+    }
     await serviceRef.current?.stopObserving();
   }, []);
 

@@ -1,4 +1,4 @@
-import type { VoiceConnectionState, VoiceContext, VoiceError } from '@/types/voice';
+import type { VoiceConnectionState, VoiceError } from '@/types/voice';
 
 export type TranscriptCallback = (text: string, isFinal: boolean) => void;
 export type AudioResponseCallback = (audioBase64: string) => void;
@@ -13,7 +13,7 @@ export interface IVoiceService {
   startListening(): void;
   stopListening(): void;
 
-  updateContext(context: VoiceContext): void;
+  updateContext(systemPrompt: string): void;
 
   onTranscript(callback: TranscriptCallback): Unsubscribe;
   onAudioResponse(callback: AudioResponseCallback): Unsubscribe;

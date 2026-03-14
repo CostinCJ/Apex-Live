@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { View, Text, ScrollView, StyleSheet, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 import { colors } from '@/theme/colors';
 import { spacing, borderRadius } from '@/theme/spacing';
 import { typography } from '@/theme/typography';
@@ -92,7 +93,6 @@ export default function ProgressScreen() {
     [summaries],
   );
 
-  // Chart data — last 7 days regardless of range selector
   const last7 = useMemo(() => {
     const since = new Date();
     since.setDate(since.getDate() - 7);
@@ -104,7 +104,6 @@ export default function ProgressScreen() {
 
   const durationChart = useMemo(() => {
     const data = bucketByDay(last7, 'total_duration');
-    // Convert seconds to minutes for display
     return data.map((d) => ({ ...d, value: Math.round(d.value / 60) }));
   }, [last7]);
 
@@ -149,15 +148,15 @@ export default function ProgressScreen() {
         </View>
 
         <View style={styles.statsRow}>
-          <View style={styles.statCard}>
+          <View style={[styles.statCard, { borderTopColor: colors.primary, borderTopWidth: 3 }]}>
             <Text style={styles.statValue}>{totalWorkouts}</Text>
             <Text style={styles.statLabel}>Workouts</Text>
           </View>
-          <View style={styles.statCard}>
+          <View style={[styles.statCard, { borderTopColor: colors.secondary, borderTopWidth: 3 }]}>
             <Text style={styles.statValue}>{formatDuration(totalDuration)}</Text>
             <Text style={styles.statLabel}>Time</Text>
           </View>
-          <View style={styles.statCard}>
+          <View style={[styles.statCard, { borderTopColor: colors.warning, borderTopWidth: 3 }]}>
             <Text style={styles.statValue}>
               {totalCalories > 0 ? Math.round(totalCalories).toLocaleString() : '0'}
             </Text>
@@ -165,12 +164,12 @@ export default function ProgressScreen() {
           </View>
         </View>
 
-        {/* Charts */}
         <WeeklyChart
           title="Duration (last 7 days)"
           data={durationChart}
           maxValue={maxDuration}
           unit="minutes"
+          barColor={colors.secondary}
         />
 
         <WeeklyChart
@@ -178,24 +177,33 @@ export default function ProgressScreen() {
           data={caloriesChart}
           maxValue={maxCalories}
           unit="kcal"
+          barColor={colors.warning}
         />
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Personal Records</Text>
+          <View style={styles.sectionHeader}>
+            <Ionicons name="trophy" size={20} color={colors.warning} />
+            <Text style={styles.sectionTitle}>Personal Records</Text>
+          </View>
           {records.length > 0 ? (
             records.map((pr) => (
               <View key={pr.id} style={styles.prRow}>
-                <View>
+                <View style={styles.prLeft}>
                   <Text style={styles.prExercise}>{pr.exercise_name}</Text>
-                  <Text style={styles.prType}>{pr.record_type}</Text>
+                  <Text style={styles.prType}>{pr.record_type.replace(/_/g, ' ')}</Text>
                 </View>
-                <Text style={styles.prValue}>
-                  {pr.value} {pr.unit}
-                </Text>
+                <View style={styles.prRight}>
+                  <Text style={styles.prValue}>
+                    {pr.value} {pr.unit}
+                  </Text>
+                </View>
               </View>
             ))
           ) : (
-            <Text style={styles.emptyText}>No records yet — keep training!</Text>
+            <View style={styles.emptyPr}>
+              <Ionicons name="trophy-outline" size={32} color={colors.textTertiary} />
+              <Text style={styles.emptyText}>No records yet — keep training!</Text>
+            </View>
           )}
         </View>
       </ScrollView>
@@ -209,30 +217,59 @@ const styles = StyleSheet.create({
   title: { ...typography.title, color: colors.textPrimary, marginBottom: spacing.lg },
   rangeRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.xl },
   rangeButton: {
-    flex: 1, paddingVertical: spacing.sm, backgroundColor: colors.surface,
-    borderRadius: borderRadius.md, alignItems: 'center', borderWidth: 1, borderColor: colors.border,
+    flex: 1,
+    paddingVertical: spacing.sm,
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.full,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.surfaceBorder,
   },
-  rangeButtonActive: { backgroundColor: colors.primary + '20', borderColor: colors.primary },
+  rangeButtonActive: {
+    backgroundColor: colors.primary + '20',
+    borderColor: colors.primary,
+  },
   rangeText: { ...typography.caption, color: colors.textTertiary, fontWeight: '600' },
   rangeTextActive: { color: colors.primary },
   statsRow: { flexDirection: 'row', gap: spacing.md, marginBottom: spacing.xl },
   statCard: {
-    flex: 1, backgroundColor: colors.surface, borderRadius: borderRadius.lg,
-    padding: spacing.lg, alignItems: 'center', borderWidth: 1, borderColor: colors.border,
+    flex: 1,
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.lg,
+    padding: spacing.lg,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.surfaceBorder,
   },
-  statValue: { ...typography.metricMedium, color: colors.textPrimary },
-  statLabel: { ...typography.metricLabel, color: colors.textTertiary, marginTop: spacing.xs },
+  statValue: { ...typography.metricMedium, color: colors.textPrimary, fontSize: 26 },
+  statLabel: { ...typography.metricLabel, color: colors.textTertiary, marginTop: spacing.xs, fontSize: 11 },
   section: {
-    backgroundColor: colors.surface, borderRadius: borderRadius.lg, padding: spacing.lg,
-    borderWidth: 1, borderColor: colors.border,
+    backgroundColor: colors.surface,
+    borderRadius: borderRadius.lg,
+    padding: spacing.lg,
+    borderWidth: 1,
+    borderColor: colors.surfaceBorder,
   },
-  sectionTitle: { ...typography.heading, color: colors.textPrimary, marginBottom: spacing.md },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginBottom: spacing.md,
+  },
+  sectionTitle: { ...typography.heading, color: colors.textPrimary },
   prRow: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
   },
-  prExercise: { ...typography.body, color: colors.textPrimary },
-  prType: { ...typography.caption, color: colors.textTertiary },
-  prValue: { ...typography.body, color: colors.primary, fontWeight: '700' },
+  prLeft: { flex: 1 },
+  prExercise: { ...typography.body, color: colors.textPrimary, fontWeight: '500' },
+  prType: { ...typography.caption, color: colors.textTertiary, textTransform: 'capitalize' },
+  prRight: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  prValue: { ...typography.body, color: colors.warning, fontWeight: '700' },
+  emptyPr: { alignItems: 'center', paddingVertical: spacing.xl, gap: spacing.sm },
   emptyText: { ...typography.body, color: colors.textTertiary },
 });

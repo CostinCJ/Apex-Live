@@ -9,6 +9,7 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { colors } from '@/theme/colors';
 import { spacing, touchTarget, borderRadius } from '@/theme/spacing';
 import { typography } from '@/theme/typography';
@@ -34,6 +35,9 @@ export function AuthForm({
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [localError, setLocalError] = useState<string | null>(null);
+  const [emailFocused, setEmailFocused] = useState(false);
+  const [passwordFocused, setPasswordFocused] = useState(false);
+  const [confirmFocused, setConfirmFocused] = useState(false);
 
   const handleSubmit = () => {
     setLocalError(null);
@@ -65,54 +69,79 @@ export function AuthForm({
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <View style={styles.inner}>
-        <Text style={styles.logo}>APEX</Text>
+        {/* Logo */}
+        <View style={styles.logoContainer}>
+          <Text style={styles.logo}>APEX</Text>
+          <View style={styles.logoLine} />
+          <Text style={styles.tagline}>AI Voice Fitness Coach</Text>
+        </View>
+
         <Text style={styles.subtitle}>
           {mode === 'login' ? 'Welcome back' : 'Create your account'}
         </Text>
 
         {displayError ? (
           <View style={styles.errorContainer}>
+            <Ionicons name="alert-circle" size={16} color={colors.error} />
             <Text style={styles.errorText}>{displayError}</Text>
           </View>
         ) : null}
 
-        <TextInput
-          style={styles.input}
-          placeholder="Email"
-          placeholderTextColor={colors.textTertiary}
-          value={email}
-          onChangeText={setEmail}
-          keyboardType="email-address"
-          autoCapitalize="none"
-          autoCorrect={false}
-          accessibilityLabel="Email address"
-          editable={!loading}
-        />
-
-        <TextInput
-          style={styles.input}
-          placeholder="Password"
-          placeholderTextColor={colors.textTertiary}
-          value={password}
-          onChangeText={setPassword}
-          secureTextEntry
-          autoCapitalize="none"
-          accessibilityLabel="Password"
-          editable={!loading}
-        />
-
-        {mode === 'register' ? (
+        {/* Email */}
+        <View style={[styles.inputWrapper, emailFocused && styles.inputWrapperFocused]}>
+          <Ionicons name="mail-outline" size={18} color={emailFocused ? colors.primary : colors.textTertiary} style={styles.inputIcon} />
           <TextInput
             style={styles.input}
-            placeholder="Confirm password"
+            placeholder="Email"
             placeholderTextColor={colors.textTertiary}
-            value={confirmPassword}
-            onChangeText={setConfirmPassword}
-            secureTextEntry
+            value={email}
+            onChangeText={setEmail}
+            onFocus={() => setEmailFocused(true)}
+            onBlur={() => setEmailFocused(false)}
+            keyboardType="email-address"
             autoCapitalize="none"
-            accessibilityLabel="Confirm password"
+            autoCorrect={false}
+            accessibilityLabel="Email address"
             editable={!loading}
           />
+        </View>
+
+        {/* Password */}
+        <View style={[styles.inputWrapper, passwordFocused && styles.inputWrapperFocused]}>
+          <Ionicons name="lock-closed-outline" size={18} color={passwordFocused ? colors.primary : colors.textTertiary} style={styles.inputIcon} />
+          <TextInput
+            style={styles.input}
+            placeholder="Password"
+            placeholderTextColor={colors.textTertiary}
+            value={password}
+            onChangeText={setPassword}
+            onFocus={() => setPasswordFocused(true)}
+            onBlur={() => setPasswordFocused(false)}
+            secureTextEntry
+            autoCapitalize="none"
+            accessibilityLabel="Password"
+            editable={!loading}
+          />
+        </View>
+
+        {/* Confirm Password */}
+        {mode === 'register' ? (
+          <View style={[styles.inputWrapper, confirmFocused && styles.inputWrapperFocused]}>
+            <Ionicons name="lock-closed-outline" size={18} color={confirmFocused ? colors.primary : colors.textTertiary} style={styles.inputIcon} />
+            <TextInput
+              style={styles.input}
+              placeholder="Confirm password"
+              placeholderTextColor={colors.textTertiary}
+              value={confirmPassword}
+              onChangeText={setConfirmPassword}
+              onFocus={() => setConfirmFocused(true)}
+              onBlur={() => setConfirmFocused(false)}
+              secureTextEntry
+              autoCapitalize="none"
+              accessibilityLabel="Confirm password"
+              editable={!loading}
+            />
+          </View>
         ) : null}
 
         <Pressable
@@ -161,47 +190,85 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     padding: spacing.xl,
   },
+
+  // Logo
+  logoContainer: {
+    alignItems: 'center',
+    marginBottom: spacing.sm,
+  },
   logo: {
-    fontSize: 48,
+    fontSize: 52,
     fontWeight: '900',
     color: colors.primary,
     textAlign: 'center',
-    letterSpacing: 8,
-    marginBottom: spacing.xs,
+    letterSpacing: 10,
   },
+  logoLine: {
+    width: 60,
+    height: 3,
+    backgroundColor: colors.primary,
+    borderRadius: 2,
+    marginVertical: spacing.sm,
+  },
+  tagline: {
+    ...typography.caption,
+    color: colors.textTertiary,
+    letterSpacing: 2,
+    textTransform: 'uppercase',
+  },
+
   subtitle: {
     ...typography.body,
     color: colors.textSecondary,
     textAlign: 'center',
     marginBottom: spacing.xxxl,
+    marginTop: spacing.md,
   },
   errorContainer: {
-    backgroundColor: colors.error + '20',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    backgroundColor: colors.error + '15',
     borderRadius: borderRadius.md,
     padding: spacing.md,
     marginBottom: spacing.md,
     borderWidth: 1,
-    borderColor: colors.error + '40',
+    borderColor: colors.error + '30',
   },
   errorText: {
     ...typography.caption,
     color: colors.error,
-    textAlign: 'center',
+    flex: 1,
   },
-  input: {
+
+  // Inputs
+  inputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: colors.surface,
-    borderRadius: borderRadius.md,
-    padding: spacing.lg,
+    borderRadius: borderRadius.lg,
     marginBottom: spacing.md,
-    color: colors.textPrimary,
-    fontSize: 16,
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: colors.border,
     minHeight: touchTarget.standard,
   },
+  inputWrapperFocused: {
+    borderColor: colors.primary,
+    backgroundColor: colors.surfaceGlass,
+  },
+  inputIcon: {
+    marginLeft: spacing.lg,
+  },
+  input: {
+    flex: 1,
+    padding: spacing.lg,
+    color: colors.textPrimary,
+    fontSize: 16,
+  },
+
   button: {
     backgroundColor: colors.primary,
-    borderRadius: borderRadius.md,
+    borderRadius: borderRadius.lg,
     padding: spacing.lg,
     alignItems: 'center',
     justifyContent: 'center',
@@ -210,6 +277,7 @@ const styles = StyleSheet.create({
   },
   buttonPressed: {
     opacity: 0.85,
+    transform: [{ scale: 0.99 }],
   },
   buttonDisabled: {
     opacity: 0.6,

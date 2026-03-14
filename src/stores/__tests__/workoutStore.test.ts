@@ -4,7 +4,7 @@ import type { WorkoutPlan, SetRecord } from '@/types/workout';
 const mockPlan: WorkoutPlan = {
   id: 'plan_1',
   name: 'Upper Body',
-  type: 'strength',
+  type: 'push',
   estimatedDurationMinutes: 45,
   exercises: [
     { id: 'ex_1', name: 'Bench Press', targetSets: 4, targetReps: 8, targetWeight: 135, restSeconds: 90 },
@@ -22,7 +22,7 @@ const makeSet = (overrides: Partial<SetRecord> = {}): SetRecord => ({
 });
 
 function resetStore() {
-  useWorkoutStore.setState(workoutInitialState, true);
+  useWorkoutStore.setState(workoutInitialState);
 }
 
 describe('workoutStore', () => {
@@ -33,7 +33,7 @@ describe('workoutStore', () => {
       useWorkoutStore.getState().startWorkout(mockPlan);
       const s = useWorkoutStore.getState();
       expect(s.status).toBe('active');
-      expect(s.workoutType).toBe('strength');
+      expect(s.workoutType).toBe('push');
       expect(s.exercises).toHaveLength(3);
       expect(s.currentExerciseIndex).toBe(0);
       expect(s.startedAt).toBeGreaterThan(0);
@@ -161,6 +161,51 @@ describe('workoutStore', () => {
       useWorkoutStore.getState().startWorkout(mockPlan);
       useWorkoutStore.getState().completeWorkout();
       expect(useWorkoutStore.getState().hasRecoverableWorkout()).toBe(false);
+    });
+  });
+
+  describe('pause duration tracking', () => {
+    beforeEach(() => useWorkoutStore.getState().startWorkout(mockPlan));
+
+    it('tracks pausedAt when pausing', () => {
+      useWorkoutStore.getState().pauseWorkout();
+      expect(useWorkoutStore.getState().pausedAt).toBeGreaterThan(0);
+    });
+
+    it('accumulates totalPausedMs on resume', () => {
+      const beforePause = Date.now();
+      useWorkoutStore.getState().pauseWorkout();
+      // Simulate a short pause
+      const state = useWorkoutStore.getState();
+      expect(state.pausedAt).toBeGreaterThanOrEqual(beforePause);
+      useWorkoutStore.getState().resumeWorkout();
+      expect(useWorkoutStore.getState().pausedAt).toBeNull();
+      expect(useWorkoutStore.getState().totalPausedMs).toBeGreaterThanOrEqual(0);
+    });
+
+    it('ignores pause when not active', () => {
+      useWorkoutStore.getState().pauseWorkout();
+      const pausedAt = useWorkoutStore.getState().pausedAt;
+      useWorkoutStore.getState().pauseWorkout(); // double pause
+      expect(useWorkoutStore.getState().pausedAt).toBe(pausedAt); // unchanged
+    });
+
+    it('ignores resume when not paused', () => {
+      useWorkoutStore.getState().resumeWorkout(); // already active
+      expect(useWorkoutStore.getState().status).toBe('active');
+      expect(useWorkoutStore.getState().totalPausedMs).toBe(0);
+    });
+  });
+
+  describe('getElapsedMs', () => {
+    it('returns 0 when idle', () => {
+      expect(useWorkoutStore.getState().getElapsedMs()).toBe(0);
+    });
+
+    it('returns elapsed time during active workout', () => {
+      useWorkoutStore.getState().startWorkout(mockPlan);
+      const elapsed = useWorkoutStore.getState().getElapsedMs();
+      expect(elapsed).toBeGreaterThanOrEqual(0);
     });
   });
 

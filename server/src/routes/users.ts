@@ -46,9 +46,18 @@ usersRouter.patch('/me', async (req: Request, res: Response) => {
     return;
   }
 
+  const { preferences, voiceSettings, ...rest } = parsed.data;
   const user = await prisma.user.update({
     where: { id: getUserId(req) },
-    data: parsed.data,
+    data: {
+      ...rest,
+      ...(preferences !== undefined && {
+        preferences: preferences as import('@prisma/client').Prisma.InputJsonValue,
+      }),
+      ...(voiceSettings !== undefined && {
+        voiceSettings: voiceSettings as import('@prisma/client').Prisma.InputJsonValue,
+      }),
+    },
     omit: { passwordHash: true },
   });
 

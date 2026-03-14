@@ -1,14 +1,26 @@
-import { useEffect } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { View, ActivityIndicator, StyleSheet } from 'react-native';
+import { View, ActivityIndicator, StyleSheet, LogBox } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import * as Sentry from '@sentry/react-native';
 import { colors } from '@/theme/colors';
 import { AuthProvider, useAuthContext } from '@/features/auth/context/AuthContext';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { Toast } from '@/components/Toast';
+import type { ToastMessage } from '@/components/Toast';
 import { useSettingsStore } from '@/stores/settingsStore';
+import { useAppState } from '@/hooks/useAppState';
+import { syncQueue } from '@/services/api/SyncQueue';
+
+// expo-av native module may not be in dev build — code handles this gracefully
+// but the error surfaces in LogBox. Suppress it to avoid red screen.
+LogBox.ignoreLogs([
+  'Cannot find native module',
+  'expo-av native module not available',
+  'Expo AV has been deprecated',
+]);
 
 Sentry.init({
   dsn: process.env.EXPO_PUBLIC_SENTRY_DSN ?? '',
@@ -16,6 +28,11 @@ Sentry.init({
   tracesSampleRate: 0.2,
   attachScreenshot: true,
   enableNativeFramesTracking: true,
+});
+
+// Initialize SyncQueue on app load (restores pending operations from storage)
+void syncQueue.initialize().then(() => {
+  void syncQueue.processQueue();
 });
 
 function RootNavigator() {
@@ -77,6 +94,14 @@ function RootNavigator() {
         }}
       />
       <Stack.Screen
+        name="workout/custom-builder"
+        options={{
+          presentation: 'fullScreenModal',
+          animation: 'slide_from_bottom',
+          gestureEnabled: true,
+        }}
+      />
+      <Stack.Screen
         name="workout/detail/[id]"
         options={{
           animation: 'slide_from_right',
@@ -87,6 +112,17 @@ function RootNavigator() {
 }
 
 function RootLayout() {
+  const [toast, setToast] = useState<ToastMessage | null>(null);
+
+  const dismissToast = useCallback(() => setToast(null), []);
+
+  // Process SyncQueue when app returns to foreground
+  useAppState({
+    onForeground: () => {
+      void syncQueue.processQueue();
+    },
+  });
+
   return (
     <GestureHandlerRootView style={styles.root}>
       <SafeAreaProvider>
@@ -94,6 +130,7 @@ function RootLayout() {
         <ErrorBoundary level="root">
           <AuthProvider>
             <RootNavigator />
+            <Toast message={toast} onDismiss={dismissToast} />
           </AuthProvider>
         </ErrorBoundary>
       </SafeAreaProvider>

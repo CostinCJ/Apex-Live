@@ -7,6 +7,7 @@ import {
   cancelAnimation,
 } from 'react-native-reanimated';
 import { useRealtimeStore } from '@/stores/realtimeStore';
+import { triggerHaptic } from '@/utils/haptics';
 
 /**
  * High-precision workout timer using Reanimated shared values.
@@ -24,6 +25,10 @@ export function useAnimatedTimer() {
   const syncToStore = useCallback(
     (seconds: number) => {
       setElapsedSeconds(seconds);
+      // Haptic milestone every 5 minutes
+      if (seconds > 0 && seconds % 300 === 0) {
+        void triggerHaptic('timer_milestone');
+      }
     },
     [setElapsedSeconds],
   );
@@ -71,7 +76,7 @@ export function useAnimatedTimer() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- shared values are stable refs
   }, []);
 
-  // Tick loop — uses a repeating 1-second animation to drive updates
+  // Tick loop — caller controls start/stop via returned callbacks
   useEffect(() => {
     let frameId: ReturnType<typeof requestAnimationFrame>;
     let lastTime = Date.now();
@@ -87,11 +92,17 @@ export function useAnimatedTimer() {
       frameId = requestAnimationFrame(tick);
     };
 
-    isRunning.value = true;
-    tick();
+    // Subscribe to isRunning changes to start/stop the loop
+    const interval = setInterval(() => {
+      if (isRunning.value && !frameId) {
+        lastTime = Date.now();
+        tick();
+      }
+    }, 100);
 
     return () => {
       isRunning.value = false;
+      clearInterval(interval);
       if (frameId) cancelAnimationFrame(frameId);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- shared values are stable refs, runs once on mount

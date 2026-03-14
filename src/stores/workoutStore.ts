@@ -27,11 +27,10 @@ try {
   };
 } catch {
   // Fallback for Expo Go (MMKV requires native module)
+  // Zustand's createJSONStorage handles async getItem via duck-typing
   mmkvStorage = {
     getItem: (name: string) => {
-      let result: string | null = null;
-      AsyncStorage.getItem(name).then((v) => { result = v; });
-      return result;
+      return AsyncStorage.getItem(name) as unknown as string | null;
     },
     setItem: (name: string, value: string) => { void AsyncStorage.setItem(name, value); },
     removeItem: (name: string) => { void AsyncStorage.removeItem(name); },
@@ -46,11 +45,13 @@ interface WorkoutState {
   exercises: ExerciseRecord[];
   currentExerciseIndex: number;
   startedAt: number | null;
+  pausedAt: number | null;
+  totalPausedMs: number;
   notes: string;
 }
 
 interface WorkoutActions {
-  startWorkout: (plan: WorkoutPlan) => void;
+  startWorkout: (plan: WorkoutPlan, serverWorkoutId?: string) => void;
   pauseWorkout: () => void;
   resumeWorkout: () => void;
   completeSet: (set: SetRecord) => void;
@@ -63,6 +64,7 @@ interface WorkoutActions {
 
   // Selectors
   getCurrentExercise: () => ExerciseRecord | null;
+  getElapsedMs: () => number;
 
   // Recovery
   hasRecoverableWorkout: () => boolean;
@@ -76,6 +78,8 @@ const initialState: WorkoutState = {
   exercises: [],
   currentExerciseIndex: 0,
   startedAt: null,
+  pausedAt: null,
+  totalPausedMs: 0,
   notes: '',
 };
 
@@ -86,10 +90,10 @@ export const useWorkoutStore = create<WorkoutState & WorkoutActions>()(
     immer((set, get) => ({
       ...initialState,
 
-      startWorkout: (plan) =>
+      startWorkout: (plan, serverWorkoutId) =>
         set((state) => {
           state.status = 'active';
-          state.workoutId = `workout_${Date.now()}`;
+          state.workoutId = serverWorkoutId ?? `workout_${Date.now()}`;
           state.workoutType = plan.type;
           state.planId = plan.id;
           state.currentExerciseIndex = 0;
@@ -104,11 +108,18 @@ export const useWorkoutStore = create<WorkoutState & WorkoutActions>()(
 
       pauseWorkout: () =>
         set((state) => {
+          if (state.status !== 'active') return;
           state.status = 'paused';
+          state.pausedAt = Date.now();
         }),
 
       resumeWorkout: () =>
         set((state) => {
+          if (state.status !== 'paused') return;
+          if (state.pausedAt) {
+            state.totalPausedMs += Date.now() - state.pausedAt;
+          }
+          state.pausedAt = null;
           state.status = 'active';
         }),
 
@@ -161,11 +172,21 @@ export const useWorkoutStore = create<WorkoutState & WorkoutActions>()(
           state.notes = notes;
         }),
 
-      reset: () => set(initialState),
+      reset: () =>
+        set((state) => {
+          Object.assign(state, initialState);
+        }),
 
       getCurrentExercise: () => {
         const state = get();
         return state.exercises[state.currentExerciseIndex] ?? null;
+      },
+
+      getElapsedMs: () => {
+        const state = get();
+        if (!state.startedAt) return 0;
+        const now = state.pausedAt ?? Date.now();
+        return now - state.startedAt - state.totalPausedMs;
       },
 
       hasRecoverableWorkout: () => {
@@ -185,6 +206,8 @@ export const useWorkoutStore = create<WorkoutState & WorkoutActions>()(
         exercises: state.exercises,
         currentExerciseIndex: state.currentExerciseIndex,
         startedAt: state.startedAt,
+        pausedAt: state.pausedAt,
+        totalPausedMs: state.totalPausedMs,
         notes: state.notes,
       }),
     },

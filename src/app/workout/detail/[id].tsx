@@ -13,7 +13,7 @@ type Workout = Tables<'workouts'>;
 const typeLabels: Record<string, string> = {
   push: 'Push', pull: 'Pull', legs: 'Legs', upper: 'Upper', lower: 'Lower',
   full_body: 'Full Body', hiit: 'HIIT', cardio_run: 'Run', cardio_cycle: 'Cycle',
-  cardio_row: 'Row', yoga: 'Yoga', mobility: 'Mobility', custom: 'Custom',
+  cardio_row: 'Row', boxing: 'Boxing', mobility: 'Mobility', custom: 'Custom',
 };
 
 function formatDuration(seconds: number): string {

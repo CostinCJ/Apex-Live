@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect } from 'react';
 import { View, Text, FlatList, StyleSheet, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { colors } from '@/theme/colors';
 import { spacing } from '@/theme/spacing';
 import { typography } from '@/theme/typography';
@@ -109,6 +110,9 @@ export default function HistoryScreen() {
 
       {workouts.length === 0 ? (
         <View style={styles.centered}>
+          <View style={styles.emptyIcon}>
+            <Ionicons name="barbell-outline" size={56} color={colors.textTertiary} />
+          </View>
           <Text style={styles.emptyText}>No workouts yet</Text>
           <Text style={styles.emptySubtext}>
             Complete a workout to see it here
@@ -153,6 +157,17 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  emptyIcon: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.lg,
+    borderWidth: 1,
+    borderColor: colors.surfaceBorder,
   },
   emptyText: {
     ...typography.heading,

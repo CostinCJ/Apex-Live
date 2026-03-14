@@ -1,5 +1,6 @@
 import { useState, useCallback, memo } from 'react';
 import { View, Text, TextInput, Pressable, StyleSheet } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { colors } from '@/theme/colors';
 import { spacing, touchTarget, borderRadius } from '@/theme/spacing';
@@ -26,12 +27,14 @@ export const SetTracker = memo(function SetTracker({
   const [weight, setWeight] = useState('');
   const [reps, setReps] = useState('');
   const [rpe, setRpe] = useState('');
+  const [weightFocused, setWeightFocused] = useState(false);
+  const [repsFocused, setRepsFocused] = useState(false);
 
   const currentSetNumber = completedSets.length + 1;
   const weightUnit = units === 'imperial' ? 'lbs' : 'kg';
 
-  // Get previous set data for comparison
   const previousSet = previousSets?.[completedSets.length];
+  const setsRemaining = targetSets ? targetSets - completedSets.length : null;
 
   const handleCompleteSet = useCallback(() => {
     const weightNum = parseFloat(weight);
@@ -49,7 +52,6 @@ export const SetTracker = memo(function SetTracker({
       completedAt: Date.now(),
     });
 
-    // Keep weight for next set, clear reps
     setReps('');
     setRpe('');
   }, [weight, reps, rpe, currentSetNumber, onCompleteSet]);
@@ -57,15 +59,44 @@ export const SetTracker = memo(function SetTracker({
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.exerciseName}>{exerciseName}</Text>
-        <Text style={styles.setCount}>
-          Set {currentSetNumber}{targetSets ? ` / ${targetSets}` : ''}
-        </Text>
+        <Text style={styles.exerciseName} numberOfLines={1}>{exerciseName}</Text>
+        <View style={styles.setIndicator}>
+          <Text style={styles.setCount}>
+            Set {currentSetNumber}
+          </Text>
+          {targetSets ? (
+            <Text style={styles.setTarget}> / {targetSets}</Text>
+          ) : null}
+        </View>
       </View>
+
+      {/* Set progress dots */}
+      {targetSets ? (
+        <View style={styles.setProgress}>
+          {Array.from({ length: targetSets }, (_, i) => (
+            <View
+              key={i}
+              style={[
+                styles.setDot,
+                i < completedSets.length && styles.setDotDone,
+                i === completedSets.length && styles.setDotCurrent,
+              ]}
+            >
+              {i < completedSets.length ? (
+                <Ionicons name="checkmark" size={10} color={colors.background} />
+              ) : null}
+            </View>
+          ))}
+          {setsRemaining != null && setsRemaining > 0 ? (
+            <Text style={styles.setsRemaining}>{setsRemaining} left</Text>
+          ) : null}
+        </View>
+      ) : null}
 
       {previousSet ? (
         <View style={styles.previousRow}>
-          <Text style={styles.previousLabel}>Last time:</Text>
+          <Ionicons name="time-outline" size={14} color={colors.textTertiary} />
+          <Text style={styles.previousLabel}>Last:</Text>
           <Text style={styles.previousValue}>
             {previousSet.weight}{weightUnit} x {previousSet.reps}
           </Text>
@@ -75,11 +106,13 @@ export const SetTracker = memo(function SetTracker({
       <View style={styles.inputRow}>
         <View style={styles.inputGroup}>
           <TextInput
-            style={styles.input}
+            style={[styles.input, weightFocused && styles.inputFocused]}
             value={weight}
             onChangeText={setWeight}
+            onFocus={() => setWeightFocused(true)}
+            onBlur={() => setWeightFocused(false)}
             keyboardType="decimal-pad"
-            placeholder="Weight"
+            placeholder="0"
             placeholderTextColor={colors.textTertiary}
             accessibilityLabel={`Weight in ${weightUnit}`}
           />
@@ -88,11 +121,13 @@ export const SetTracker = memo(function SetTracker({
 
         <View style={styles.inputGroup}>
           <TextInput
-            style={styles.input}
+            style={[styles.input, repsFocused && styles.inputFocused]}
             value={reps}
             onChangeText={setReps}
+            onFocus={() => setRepsFocused(true)}
+            onBlur={() => setRepsFocused(false)}
             keyboardType="number-pad"
-            placeholder="Reps"
+            placeholder="0"
             placeholderTextColor={colors.textTertiary}
             accessibilityLabel="Number of reps"
           />
@@ -123,6 +158,7 @@ export const SetTracker = memo(function SetTracker({
         accessibilityRole="button"
         accessibilityLabel="Complete set"
       >
+        <Ionicons name="checkmark-circle" size={22} color={colors.background} />
         <Text style={styles.completeButtonText}>Complete Set</Text>
       </Pressable>
 
@@ -130,10 +166,13 @@ export const SetTracker = memo(function SetTracker({
         <View style={styles.history}>
           {completedSets.map((s, i) => (
             <View key={i} style={styles.historyRow}>
+              <View style={styles.historyBadge}>
+                <Ionicons name="checkmark" size={12} color={colors.primary} />
+              </View>
               <Text style={styles.historySet}>Set {s.setNumber}</Text>
               <Text style={styles.historyValue}>
                 {s.weight}{weightUnit} x {s.reps}
-                {s.rpe != null ? ` @ RPE ${s.rpe}` : ''}
+                {s.rpe != null ? ` @ ${s.rpe}` : ''}
               </Text>
             </View>
           ))}
@@ -149,37 +188,75 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.lg,
     padding: spacing.lg,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.surfaceBorder,
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: spacing.md,
+    marginBottom: spacing.sm,
   },
   exerciseName: {
     ...typography.heading,
     color: colors.textPrimary,
     flex: 1,
   },
-  setCount: {
-    ...typography.body,
-    color: colors.primary,
-    fontWeight: '600',
+  setIndicator: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
   },
+  setCount: {
+    ...typography.button,
+    color: colors.primary,
+    fontSize: 18,
+  },
+  setTarget: {
+    ...typography.caption,
+    color: colors.textTertiary,
+  },
+
+  // Progress dots
+  setProgress: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: spacing.md,
+  },
+  setDot: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  setDotDone: {
+    backgroundColor: colors.primary,
+  },
+  setDotCurrent: {
+    borderWidth: 2,
+    borderColor: colors.primary,
+    backgroundColor: colors.background,
+  },
+  setsRemaining: {
+    ...typography.caption,
+    color: colors.textTertiary,
+    marginLeft: spacing.xs,
+  },
+
   previousRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: spacing.xs,
     marginBottom: spacing.md,
     paddingVertical: spacing.xs,
     paddingHorizontal: spacing.sm,
-    backgroundColor: colors.surfaceElevated,
+    backgroundColor: colors.surfaceGlass,
     borderRadius: borderRadius.sm,
   },
   previousLabel: {
     ...typography.caption,
     color: colors.textTertiary,
-    marginRight: spacing.sm,
   },
   previousValue: {
     ...typography.caption,
@@ -202,11 +279,16 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.md,
     padding: spacing.md,
     color: colors.textPrimary,
-    fontSize: 18,
+    fontSize: 22,
     textAlign: 'center',
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: colors.border,
-    minHeight: touchTarget.standard,
+    minHeight: touchTarget.workout,
+    fontWeight: '600',
+  },
+  inputFocused: {
+    borderColor: colors.primary,
+    backgroundColor: colors.surface,
   },
   inputUnit: {
     ...typography.caption,
@@ -216,14 +298,17 @@ const styles = StyleSheet.create({
   },
   completeButton: {
     backgroundColor: colors.primary,
-    borderRadius: borderRadius.md,
+    borderRadius: borderRadius.lg,
     padding: spacing.md,
+    flexDirection: 'row',
     alignItems: 'center',
-    minHeight: touchTarget.workout,
     justifyContent: 'center',
+    gap: spacing.sm,
+    minHeight: touchTarget.workout,
   },
   completeButtonPressed: {
     opacity: 0.85,
+    transform: [{ scale: 0.98 }],
   },
   completeButtonDisabled: {
     opacity: 0.4,
@@ -231,25 +316,38 @@ const styles = StyleSheet.create({
   completeButtonText: {
     ...typography.button,
     color: colors.background,
-    fontSize: 16,
+    fontSize: 17,
   },
   history: {
     marginTop: spacing.md,
     paddingTop: spacing.md,
     borderTopWidth: 1,
     borderTopColor: colors.border,
+    gap: spacing.xs,
   },
   historyRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    alignItems: 'center',
     paddingVertical: spacing.xs,
+    gap: spacing.sm,
+  },
+  historyBadge: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: colors.primary + '20',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   historySet: {
     ...typography.caption,
     color: colors.textTertiary,
+    width: 50,
   },
   historyValue: {
     ...typography.caption,
     color: colors.textSecondary,
+    fontWeight: '600',
+    flex: 1,
   },
 });

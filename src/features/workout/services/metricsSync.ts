@@ -1,14 +1,15 @@
 import { api } from '@/services/api/client';
 import { METRICS_BATCH_SIZE, METRICS_FLUSH_INTERVAL } from '@/utils/constants';
 
-interface PendingMetric {
+export interface PendingMetric {
   workout_id: string;
-  user_id: string;
   metric_type: string;
   value: number;
   unit: string | null;
   recorded_at: string;
 }
+
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const MAX_BUFFER_SIZE = 1000;
 const MAX_FINAL_FLUSH_ITERATIONS = 10;
@@ -32,6 +33,10 @@ export class MetricsSyncService {
   }
 
   addMetric(metric: PendingMetric): void {
+    if (!UUID_REGEX.test(metric.workout_id)) {
+      console.warn('MetricsSyncService: skipping metric with non-UUID workout_id');
+      return;
+    }
     // Cap buffer size to prevent unbounded memory growth
     if (this.buffer.length >= MAX_BUFFER_SIZE) {
       this.buffer.splice(0, this.buffer.length - MAX_BUFFER_SIZE + 1);
@@ -78,6 +83,12 @@ export class MetricsSyncService {
     // Flush all remaining in batches, with a max iteration guard
     let iterations = 0;
     while (this.buffer.length > 0 && iterations < MAX_FINAL_FLUSH_ITERATIONS) {
+      if (this.flushing) {
+        // Wait for in-progress flush to complete before retrying
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        iterations++;
+        continue;
+      }
       await this.flush();
       iterations++;
     }

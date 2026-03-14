@@ -1,8 +1,32 @@
-import { Audio, type AVPlaybackStatus } from 'expo-av';
-import { File, Paths } from 'expo-file-system';
+// Lazy-loaded expo-av and expo-file-system to avoid crash in Expo Go
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let modules: { Audio: any; File: any; Paths: any } | null = null;
+
+let modulesUnavailable = false;
+
+async function getModules() {
+  if (modulesUnavailable) return null;
+  if (!modules) {
+    try {
+      const [av, fs] = await Promise.all([
+        import('expo-av'),
+        import('expo-file-system'),
+      ]);
+      // Probe: verify native modules are usable
+      await av.Audio.getPermissionsAsync();
+      modules = { Audio: av.Audio, File: fs.File, Paths: fs.Paths };
+    } catch {
+      console.warn('expo-av/expo-file-system native modules not available (Expo Go?)');
+      modulesUnavailable = true;
+      return null;
+    }
+  }
+  return modules;
+}
 
 export class AudioPlaybackService {
-  private currentSound: Audio.Sound | null = null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private currentSound: any = null;
   private audioQueue: string[] = [];
   private isPlaying = false;
   private onSpeakingChange: ((speaking: boolean) => void) | null = null;
@@ -10,6 +34,9 @@ export class AudioPlaybackService {
   private consecutiveErrors = 0;
 
   async initialize(): Promise<void> {
+    const mods = await getModules();
+    if (!mods) return;
+    const { Audio } = mods;
     await Audio.setAudioModeAsync({
       playsInSilentModeIOS: true,
       staysActiveInBackground: true,
@@ -51,6 +78,14 @@ export class AudioPlaybackService {
     this.consecutiveErrors = 0;
 
     try {
+      const mods = await getModules();
+      if (!mods) {
+        this.isPlaying = false;
+        this.onSpeakingChange?.(false);
+        return;
+      }
+      const { Audio, File, Paths } = mods;
+
       // Write base64 audio to a temp file using new expo-file-system API
       this.fileCounter++;
       const file = new File(Paths.cache, `coach_audio_${this.fileCounter}.wav`);
@@ -62,7 +97,8 @@ export class AudioPlaybackService {
       );
       this.currentSound = sound;
 
-      sound.setOnPlaybackStatusUpdate((status: AVPlaybackStatus) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      sound.setOnPlaybackStatusUpdate((status: any) => {
         if (status.isLoaded && status.didJustFinish) {
           void this.onPlaybackFinished(sound, file);
         }
@@ -71,7 +107,6 @@ export class AudioPlaybackService {
       console.error('Playback error:', error);
       this.consecutiveErrors++;
       if (this.consecutiveErrors >= 3) {
-        // Bail out to prevent infinite recursion on persistent failures
         this.isPlaying = false;
         this.audioQueue = [];
         this.onSpeakingChange?.(false);
@@ -79,19 +114,18 @@ export class AudioPlaybackService {
       }
       this.isPlaying = false;
       this.onSpeakingChange?.(false);
-      // Use setTimeout to break synchronous recursion
       setTimeout(() => void this.playNext(), 0);
     }
   }
 
-  private async onPlaybackFinished(sound: Audio.Sound, file: File): Promise<void> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private async onPlaybackFinished(sound: any, file: any): Promise<void> {
     try {
       await sound.unloadAsync();
     } catch {
       // Ignore unload errors
     }
 
-    // Clean up temp file
     try {
       file.delete();
     } catch {

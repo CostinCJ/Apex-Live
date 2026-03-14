@@ -146,7 +146,8 @@ export class RealtimeWebSocket {
   private startKeepalive(): void {
     this.stopKeepalive();
     this.keepaliveTimer = setInterval(() => {
-      this.send({ type: 'input_audio_buffer.clear' });
+      // Send a no-op ping by appending an empty audio buffer (doesn't destroy buffered audio)
+      this.send({ type: 'input_audio_buffer.append', audio: '' });
     }, WS_KEEPALIVE_INTERVAL);
   }
 
@@ -164,7 +165,9 @@ export class RealtimeWebSocket {
     }
 
     this.setState('reconnecting');
-    const delay = WS_RECONNECT_BASE_DELAY * Math.pow(2, this.reconnectAttempts);
+    const baseDelay = WS_RECONNECT_BASE_DELAY * Math.pow(2, this.reconnectAttempts);
+    const jitter = Math.random() * 1000;
+    const delay = Math.min(baseDelay + jitter, 30_000);
     this.reconnectAttempts++;
 
     this.reconnectTimer = setTimeout(() => {

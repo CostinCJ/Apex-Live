@@ -56,7 +56,7 @@ metricsRouter.post('/batch', async (req: Request, res: Response) => {
     value: m.value,
     unit: m.unit ?? null,
     recordedAt: m.recordedAt ? new Date(m.recordedAt) : new Date(),
-    metadata: m.metadata ?? undefined,
+    metadata: (m.metadata ?? undefined) as import('@prisma/client').Prisma.InputJsonValue | undefined,
   }));
 
   const result = await prisma.workoutMetric.createMany({ data: rows });
@@ -112,7 +112,7 @@ metricsRouter.post('/', async (req: Request, res: Response) => {
       value: parsed.data.value,
       unit: parsed.data.unit ?? null,
       recordedAt: parsed.data.recordedAt ? new Date(parsed.data.recordedAt) : new Date(),
-      metadata: parsed.data.metadata ?? undefined,
+      metadata: (parsed.data.metadata ?? undefined) as import('@prisma/client').Prisma.InputJsonValue | undefined,
     },
   });
 

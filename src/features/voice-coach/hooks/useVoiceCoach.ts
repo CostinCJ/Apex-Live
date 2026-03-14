@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef } from 'react';
 import { api } from '@/services/api/client';
 import { OpenAIRealtimeAdapter } from '@/services/voice/OpenAIRealtimeAdapter';
 import { useRealtimeStore } from '@/stores/realtimeStore';
+import { useWorkoutStore } from '@/stores/workoutStore';
 import { useAuthContext } from '@/features/auth/context/AuthContext';
 import { buildSystemPrompt, shouldUpdateContext } from '@/utils/prompt-engine';
 import { useSettingsStore } from '@/stores/settingsStore';
@@ -9,10 +10,53 @@ import { useMicPermission } from './useMicPermission';
 import { COACH_CONTEXT_UPDATE_INTERVAL } from '@/utils/constants';
 import type { VoiceContext } from '@/types/voice';
 
+interface PreviousWorkoutData {
+  id: string;
+  startedAt: string;
+  completedAt: string | null;
+  durationSeconds: number | null;
+  metricsSummary: Record<string, unknown> | null;
+}
+
+function formatPreviousSession(data: PreviousWorkoutData): string {
+  const lines: string[] = [];
+  const date = new Date(data.startedAt).toLocaleDateString();
+  lines.push(`Last session date: ${date}`);
+
+  if (data.durationSeconds) {
+    const mins = Math.floor(data.durationSeconds / 60);
+    lines.push(`Last session duration: ${mins} minutes`);
+  }
+
+  if (data.metricsSummary) {
+    const summary = data.metricsSummary;
+    if (summary.total_sets) lines.push(`Last session total sets: ${summary.total_sets}`);
+    if (summary.total_reps) lines.push(`Last session total reps: ${summary.total_reps}`);
+    if (summary.total_volume) lines.push(`Last session total volume: ${summary.total_volume}`);
+    if (summary.total_calories) lines.push(`Last session calories: ${summary.total_calories}`);
+    if (summary.avg_heart_rate) lines.push(`Last session avg HR: ${summary.avg_heart_rate} BPM`);
+    if (summary.exercises && Array.isArray(summary.exercises)) {
+      lines.push('Last session exercises:');
+      for (const ex of summary.exercises as Array<Record<string, unknown>>) {
+        if (ex.name && ex.sets) {
+          const sets = ex.sets as Array<Record<string, unknown>>;
+          const setDetails = sets
+            .map((s) => `${s.weight ?? '?'}x${s.reps ?? '?'}`)
+            .join(', ');
+          lines.push(`  - ${ex.name}: ${setDetails}`);
+        }
+      }
+    }
+  }
+
+  return lines.join('\n');
+}
+
 export function useVoiceCoach() {
   const adapterRef = useRef<OpenAIRealtimeAdapter | null>(null);
   const contextTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const lastContextRef = useRef<VoiceContext | null>(null);
+  const previousSessionRef = useRef<string | null>(null);
 
   const { session } = useAuthContext();
   const { request: requestMic } = useMicPermission();
@@ -66,19 +110,27 @@ export function useVoiceCoach() {
         if (state === 'connected') {
           setCoachState('idle');
           // Send initial system prompt
-          const prompt = buildCurrentPrompt();
+          const { prompt } = buildCurrentContext();
           if (prompt) {
-            adapter.updateContext({ workoutType: null } as VoiceContext);
+            adapter.updateContext(prompt);
           }
         }
       });
 
       adapter.onTranscript((text, isFinal) => {
-        if (isFinal) {
+        // input_audio_transcription.completed = user's speech (always final)
+        // response.audio_transcript.delta/done = coach's response
+        // The adapter fires with isFinal=true for both user transcription
+        // and coach transcript done; distinguish by checking if we're in
+        // 'processing' state (user just spoke) vs not
+        if (isFinal && coachState === 'listening') {
+          // User's final transcript
           setTranscript(text);
           setCoachState('processing');
+        } else {
+          // Coach's streaming/final transcript
+          setCoachMessage(text);
         }
-        setCoachMessage(text);
       });
 
       adapter.onAudioResponse(() => {
@@ -94,6 +146,32 @@ export function useVoiceCoach() {
       });
 
       await adapter.connect(data.token);
+
+      // Fetch previous workout data for progressive overload context
+      const workoutType = useWorkoutStore.getState().workoutType;
+      const workoutId = useWorkoutStore.getState().workoutId;
+      if (workoutType) {
+        const excludeParam = workoutId ? `&excludeId=${workoutId}` : '';
+        const { data: prevData } = await api.get<{ data: PreviousWorkoutData | null }>(
+          `/api/progress/previous-workout?workoutType=${workoutType}${excludeParam}`,
+        );
+        if (prevData?.data) {
+          previousSessionRef.current = formatPreviousSession(prevData.data);
+          // Immediately update context with previous session data
+          const { prompt } = buildCurrentContext();
+          if (prompt) {
+            adapter.updateContext(prompt);
+          }
+        }
+      }
+
+      // Auto-start continuous listening if voiceActivation is always_on
+      const voiceActivation = useSettingsStore.getState().voiceActivation;
+      if (voiceActivation === 'always_on') {
+        adapter.startListening();
+        setListening(true);
+        setCoachState('listening');
+      }
 
       // Start periodic context updates
       startContextUpdates();
@@ -143,24 +221,26 @@ export function useVoiceCoach() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- Zustand actions are stable refs
   }, [connectionState]);
 
-  // Build current system prompt
-  const buildCurrentPrompt = useCallback((): string | null => {
+  // Build current system prompt with workout context
+  const buildCurrentContext = useCallback((): { context: VoiceContext; prompt: string | null } => {
     const store = useRealtimeStore.getState();
     const settings = useSettingsStore.getState();
+    const workout = useWorkoutStore.getState();
+    const currentExercise = workout.getCurrentExercise();
 
     const context: VoiceContext = {
-      workoutType: null,
-      currentExercise: null,
-      currentSet: null,
+      workoutType: workout.workoutType,
+      currentExercise: currentExercise?.exerciseName ?? null,
+      currentSet: currentExercise ? currentExercise.sets.length + 1 : null,
       totalSets: null,
       elapsedSeconds: store.elapsedSeconds,
       heartRate: store.heartRate,
       heartRateZone: store.heartRateZone,
       caloriesBurned: store.caloriesBurned,
-      previousSessionSummary: null,
+      previousSessionSummary: previousSessionRef.current,
     };
 
-    return buildSystemPrompt(
+    const prompt = buildSystemPrompt(
       {
         fitnessLevel: settings.fitnessLevel ?? 'intermediate',
         coachingStyle: settings.coachStyle,
@@ -169,6 +249,8 @@ export function useVoiceCoach() {
       },
       context,
     );
+
+    return { context, prompt };
   }, []);
 
   const startContextUpdates = useCallback(() => {
@@ -178,23 +260,11 @@ export function useVoiceCoach() {
       const currentConnectionState = useRealtimeStore.getState().voiceConnectionState;
       if (!adapter || currentConnectionState !== 'connected') return;
 
-      const store = useRealtimeStore.getState();
-      const context: VoiceContext = {
-        workoutType: null,
-        currentExercise: null,
-        currentSet: null,
-        totalSets: null,
-        elapsedSeconds: store.elapsedSeconds,
-        heartRate: store.heartRate,
-        heartRateZone: store.heartRateZone,
-        caloriesBurned: store.caloriesBurned,
-        previousSessionSummary: null,
-      };
+      const { context, prompt } = buildCurrentContext();
 
       if (shouldUpdateContext(lastContextRef.current, context)) {
-        const prompt = buildCurrentPrompt();
         if (prompt) {
-          adapter.updateContext(context);
+          adapter.updateContext(prompt);
         }
         lastContextRef.current = context;
       }

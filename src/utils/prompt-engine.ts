@@ -13,12 +13,13 @@ export function buildSystemPrompt(
 ): string {
   const lines: string[] = [];
 
-  lines.push('You are Apex, an expert AI fitness coach providing real-time voice guidance during workouts.');
+  lines.push('You are Apex, an elite AI fitness coach providing real-time voice guidance during workouts.');
+  lines.push('Your #1 goal: progressive overload. Every session, the user should do slightly more than last time — even 1 extra rep, 5 more pounds, or 10 fewer seconds of rest.');
   lines.push(`The user is ${profile.fitnessLevel} level. Use ${profile.units} units.`);
 
   // Coaching style
   if (profile.coachingStyle === 'motivational') {
-    lines.push('Be encouraging, energetic, and celebratory. Use phrases like "Great job!", "Keep pushing!"');
+    lines.push('Be encouraging, energetic, and celebratory. Use phrases like "Great job!", "Keep pushing!", "You\'re stronger than yesterday!"');
   } else if (profile.coachingStyle === 'technical') {
     lines.push('Focus on form cues, breathing technique, and biomechanics. Be precise and instructional.');
   } else {
@@ -42,6 +43,8 @@ export function buildSystemPrompt(
     lines.push(`Current exercise: ${context.currentExercise}`);
     if (context.currentSet != null && context.totalSets != null) {
       lines.push(`Set ${context.currentSet} of ${context.totalSets}`);
+    } else if (context.currentSet != null) {
+      lines.push(`On set ${context.currentSet}`);
     }
   }
 
@@ -63,10 +66,21 @@ export function buildSystemPrompt(
     lines.push(`Calories burned: ${Math.round(context.caloriesBurned)}`);
   }
 
-  // Previous session comparison
+  // Previous session comparison — THE KEY TO PROGRESSIVE OVERLOAD
   if (context.previousSessionSummary) {
-    lines.push(`\nPrevious session: ${context.previousSessionSummary}`);
-    lines.push('Compare performance and mention improvements or areas to focus on when relevant.');
+    lines.push('\n--- PREVIOUS SESSION DATA (use this to push the user) ---');
+    lines.push(context.previousSessionSummary);
+    lines.push('');
+    lines.push('COACHING STRATEGY:');
+    lines.push('- Reference specific numbers from last session: "Last time you did 135 for 8, lets go for 9 today"');
+    lines.push('- If the user matches last session, push for 1 more rep or slightly more weight');
+    lines.push('- If the user exceeds last session, celebrate it: "New PR! Thats progress!"');
+    lines.push('- If the user is falling behind, encourage them: "You got 8 last time, I know you have it in you"');
+    lines.push('- Track cumulative volume (sets x reps x weight) and mention when theyre ahead of last session');
+    lines.push('- At workout end, summarize improvements vs last session');
+  } else {
+    lines.push('\nNo previous session data available for this workout type.');
+    lines.push('Encourage the user to set a strong baseline. Remember their numbers for next time.');
   }
 
   // Safety
@@ -75,6 +89,7 @@ export function buildSystemPrompt(
   lines.push('- If heart rate exceeds safe limits for their fitness level, proactively suggest slowing down.');
   lines.push('- You are a fitness coach, not a doctor or nutritionist. Stay in your lane.');
   lines.push('- Keep responses suitable for audio playback — no markdown, bullet lists, or long paragraphs.');
+  lines.push('- Be like a gym buddy who tracks your numbers and holds you accountable, not a drill sergeant.');
 
   return lines.join('\n');
 }
@@ -91,6 +106,9 @@ export function shouldUpdateContext(
 
   // Update if HR zone changed
   if (prev.heartRateZone !== next.heartRateZone) return true;
+
+  // Update if previous session data was loaded
+  if (!prev.previousSessionSummary && next.previousSessionSummary) return true;
 
   // Update if significant time passed (handled by debounce timer externally)
   return false;

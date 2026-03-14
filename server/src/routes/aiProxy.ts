@@ -15,6 +15,13 @@ function checkRateLimit(userId: string): boolean {
   const now = Date.now();
   const entry = rateLimitMap.get(userId);
 
+  // Clean up expired entries periodically
+  if (rateLimitMap.size > 100) {
+    for (const [key, val] of rateLimitMap) {
+      if (now > val.resetAt) rateLimitMap.delete(key);
+    }
+  }
+
   if (!entry || now > entry.resetAt) {
     rateLimitMap.set(userId, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
     return true;
@@ -54,26 +61,33 @@ aiProxyRouter.post('/session', async (req: Request, res: Response) => {
   const model = rawModel;
   const voice = rawVoice;
 
-  const sessionResponse = await fetch('https://api.openai.com/v1/realtime/sessions', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${env.OPENAI_API_KEY}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model,
-      voice,
-      input_audio_format: 'pcm16',
-      output_audio_format: 'pcm16',
-      input_audio_transcription: { model: 'whisper-1' },
-      turn_detection: {
-        type: 'server_vad',
-        threshold: 0.5,
-        prefix_padding_ms: 300,
-        silence_duration_ms: 500,
+  let sessionResponse: globalThis.Response;
+  try {
+    sessionResponse = await fetch('https://api.openai.com/v1/realtime/sessions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${env.OPENAI_API_KEY}`,
+        'Content-Type': 'application/json',
       },
-    }),
-  });
+      body: JSON.stringify({
+        model,
+        voice,
+        input_audio_format: 'pcm16',
+        output_audio_format: 'pcm16',
+        input_audio_transcription: { model: 'whisper-1' },
+        turn_detection: {
+          type: 'server_vad',
+          threshold: 0.5,
+          prefix_padding_ms: 300,
+          silence_duration_ms: 500,
+        },
+      }),
+    });
+  } catch (err) {
+    console.error('OpenAI session fetch failed:', err);
+    res.status(502).json({ error: 'Failed to reach OpenAI API' });
+    return;
+  }
 
   if (!sessionResponse.ok) {
     const errorText = await sessionResponse.text();
@@ -82,7 +96,7 @@ aiProxyRouter.post('/session', async (req: Request, res: Response) => {
     return;
   }
 
-  const sessionData = await sessionResponse.json() as Record<string, unknown>;
+  const sessionData = (await sessionResponse.json()) as Record<string, unknown>;
   const clientSecret = sessionData.client_secret as Record<string, unknown> | undefined;
 
   res.json({

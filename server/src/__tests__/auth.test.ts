@@ -11,7 +11,7 @@ function randomEmail(): string {
 
 describe('Auth API', () => {
   const email = randomEmail();
-  const password = 'testpass123';
+  const password = 'TestPass1';
   let accessToken = '';
   let refreshToken = '';
 

@@ -1,4 +1,4 @@
-import type { VoiceConnectionState, VoiceContext, VoiceError } from '@/types/voice';
+import type { VoiceConnectionState, VoiceError } from '@/types/voice';
 import type {
   IVoiceService,
   TranscriptCallback,
@@ -82,11 +82,9 @@ export class OpenAIRealtimeAdapter implements IVoiceService {
     this.ws.commitAudioBuffer();
   }
 
-  updateContext(context: VoiceContext): void {
-    // We'll send a session.update with new instructions
-    // The prompt-engine builds the full system prompt
-    // This is called from the hook with the full prompt string
-    this.ws.updateSession(JSON.stringify(context));
+  updateContext(systemPrompt: string): void {
+    // Send session.update with the pre-built system prompt string
+    this.ws.updateSession(systemPrompt);
   }
 
   onTranscript(callback: TranscriptCallback): Unsubscribe {
@@ -143,6 +141,7 @@ export class OpenAIRealtimeAdapter implements IVoiceService {
 
         case 'input_audio_buffer.speech_started':
           void this.playback.interrupt();
+          this.pendingTranscript = '';
           break;
 
         case 'error':

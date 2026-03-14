@@ -1,11 +1,10 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { api } from './client';
 
 interface QueuedOperation {
   id: string;
-  table: string;
-  type: 'insert' | 'update' | 'upsert';
-  data: Record<string, unknown>;
+  path: string;
+  method: 'POST' | 'PATCH' | 'PUT' | 'DELETE';
+  body?: unknown;
   timestamp: number;
   retryCount: number;
 }
@@ -13,13 +12,33 @@ interface QueuedOperation {
 const QUEUE_KEY = 'apex_sync_queue';
 const MAX_RETRIES = 5;
 
+// Try MMKV for fast synchronous persistence, fall back to AsyncStorage
+let storage: {
+  getItem: (key: string) => string | null | Promise<string | null>;
+  setItem: (key: string, value: string) => void;
+};
+
+try {
+  const { createMMKV } = require('react-native-mmkv');
+  const mmkv = createMMKV({ id: 'sync-queue' });
+  storage = {
+    getItem: (key: string) => mmkv.getString(key) ?? null,
+    setItem: (key: string, value: string) => mmkv.set(key, value),
+  };
+} catch {
+  storage = {
+    getItem: (key: string) => AsyncStorage.getItem(key) as unknown as string | null,
+    setItem: (key: string, value: string) => { void AsyncStorage.setItem(key, value); },
+  };
+}
+
 export class SyncQueue {
   private queue: QueuedOperation[] = [];
   private processing = false;
 
   async initialize(): Promise<void> {
     try {
-      const stored = await AsyncStorage.getItem(QUEUE_KEY);
+      const stored = await Promise.resolve(storage.getItem(QUEUE_KEY));
       if (stored) {
         this.queue = JSON.parse(stored) as QueuedOperation[];
       }
@@ -28,22 +47,22 @@ export class SyncQueue {
     }
   }
 
-  async enqueue(
-    table: string,
-    type: 'insert' | 'update' | 'upsert',
-    data: Record<string, unknown>,
-  ): Promise<void> {
+  enqueue(
+    path: string,
+    method: 'POST' | 'PATCH' | 'PUT' | 'DELETE',
+    body?: unknown,
+  ): void {
     const op: QueuedOperation = {
       id: `${Date.now()}_${Math.random().toString(36).slice(2)}`,
-      table,
-      type,
-      data,
+      path,
+      method,
+      body,
       timestamp: Date.now(),
       retryCount: 0,
     };
 
     this.queue.push(op);
-    await this.persist();
+    this.persist();
   }
 
   async processQueue(): Promise<void> {
@@ -51,50 +70,59 @@ export class SyncQueue {
 
     this.processing = true;
 
-    const toProcess = [...this.queue];
-    const failed: QueuedOperation[] = [];
+    // Lazy import to break circular dependency (client.ts <-> SyncQueue.ts)
+    const { api } = await import('./client');
 
-    for (const op of toProcess) {
+    // Process items one at a time, skip items whose retry backoff hasn't elapsed
+    const now = Date.now();
+    const remaining: QueuedOperation[] = [];
+
+    for (const op of this.queue) {
+      // Check backoff delay
+      const nextRetryAt = op.timestamp + Math.min(1000 * Math.pow(2, op.retryCount), 30_000);
+      if (op.retryCount > 0 && now < nextRetryAt) {
+        remaining.push(op);
+        continue;
+      }
+
       try {
         let result;
 
-        if (op.type === 'insert') {
-          result = await api.post(`/api/${op.table}`, op.data);
-        } else if (op.type === 'update') {
-          const { id, ...rest } = op.data;
-          result = await api.patch(`/api/${op.table}/${id as string}`, rest);
-        } else {
-          // upsert
-          const id = op.data.id as string | undefined;
-          result = id
-            ? await api.put(`/api/${op.table}/${id}`, op.data)
-            : await api.post(`/api/${op.table}`, op.data);
+        switch (op.method) {
+          case 'POST':
+            result = await api.post(op.path, op.body);
+            break;
+          case 'PATCH':
+            result = await api.patch(op.path, op.body);
+            break;
+          case 'PUT':
+            result = await api.put(op.path, op.body);
+            break;
+          case 'DELETE':
+            result = await api.delete(op.path);
+            break;
         }
 
         if (result.error) {
+          // 409 Conflict = server has newer data, treat as success
+          if (result.error.status === 409) continue;
           throw new Error(result.error.message);
         }
-
-        // Remove from queue on success
-        this.queue = this.queue.filter((q) => q.id !== op.id);
-      } catch (error) {
-        console.error(`Sync failed for ${op.table}:`, error);
+        // Success — item is dropped (not added to remaining)
+      } catch {
         op.retryCount++;
+        op.timestamp = now;
 
         if (op.retryCount < MAX_RETRIES) {
-          // Exponential backoff before next retry
-          const delay = Math.min(1000 * Math.pow(2, op.retryCount), 30000);
-          await new Promise((r) => setTimeout(r, delay));
-          failed.push(op);
+          remaining.push(op);
         } else {
-          console.error(`Dropping operation after ${MAX_RETRIES} retries:`, op);
-          this.queue = this.queue.filter((q) => q.id !== op.id);
+          console.error(`Dropping operation after ${MAX_RETRIES} retries:`, op.path);
         }
       }
     }
 
-    this.queue = [...this.queue.filter((q) => !toProcess.includes(q)), ...failed];
-    await this.persist();
+    this.queue = remaining;
+    this.persist();
     this.processing = false;
   }
 
@@ -102,9 +130,9 @@ export class SyncQueue {
     return this.queue.length;
   }
 
-  private async persist(): Promise<void> {
+  private persist(): void {
     try {
-      await AsyncStorage.setItem(QUEUE_KEY, JSON.stringify(this.queue));
+      storage.setItem(QUEUE_KEY, JSON.stringify(this.queue));
     } catch {
       // Ignore persistence errors
     }

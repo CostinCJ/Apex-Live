@@ -21,7 +21,7 @@ export type WorkoutTypeEnum =
   | 'cardio_run'
   | 'cardio_cycle'
   | 'cardio_row'
-  | 'yoga'
+  | 'boxing'
   | 'mobility'
   | 'custom';
 

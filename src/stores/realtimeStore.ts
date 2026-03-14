@@ -75,10 +75,10 @@ export const useRealtimeStore = create<RealtimeState & RealtimeActions>()(
 
     updateHealthMetrics: (metrics) =>
       set((state) => ({
-        heartRate: metrics.heartRate ?? state.heartRate,
-        heartRateZone: metrics.heartRateZone ?? state.heartRateZone,
-        caloriesBurned: metrics.caloriesBurned ?? state.caloriesBurned,
-        steps: metrics.steps ?? state.steps,
+        heartRate: 'heartRate' in metrics ? metrics.heartRate ?? null : state.heartRate,
+        heartRateZone: 'heartRateZone' in metrics ? metrics.heartRateZone ?? null : state.heartRateZone,
+        caloriesBurned: 'caloriesBurned' in metrics ? metrics.caloriesBurned ?? null : state.caloriesBurned,
+        steps: 'steps' in metrics ? metrics.steps ?? null : state.steps,
       })),
 
     setElapsedSeconds: (elapsedSeconds) => set({ elapsedSeconds }),

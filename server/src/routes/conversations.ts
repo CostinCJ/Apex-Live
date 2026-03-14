@@ -73,7 +73,7 @@ conversationsRouter.post('/:id/messages', async (req: Request, res: Response) =>
     role: m.role as import('@prisma/client').ConversationRole,
     content: m.content,
     audioDurationMs: m.audioDurationMs ?? null,
-    metadata: m.metadata ?? undefined,
+    metadata: (m.metadata ?? undefined) as import('@prisma/client').Prisma.InputJsonValue | undefined,
   }));
 
   await prisma.coachMessage.createMany({ data: rows });

@@ -1,8 +1,11 @@
 import { Router, type Request, type Response } from 'express';
 import { z } from 'zod';
+import type { Prisma } from '@prisma/client';
 import { prisma } from '../config/database.js';
 import { requireAuth, getUserId } from '../middleware/auth.js';
 import { param } from '../middleware/params.js';
+
+type JsonValue = Prisma.InputJsonValue;
 
 export const workoutsRouter = Router();
 workoutsRouter.use(requireAuth);
@@ -11,7 +14,7 @@ const createWorkoutSchema = z.object({
   workoutType: z.enum([
     'push', 'pull', 'legs', 'upper', 'lower', 'full_body',
     'hiit', 'cardio_run', 'cardio_cycle', 'cardio_row',
-    'yoga', 'mobility', 'custom',
+    'boxing', 'mobility', 'custom',
   ]),
   title: z.string().optional(),
   plan: z.record(z.string(), z.unknown()).optional(),
@@ -78,13 +81,20 @@ workoutsRouter.post('/', async (req: Request, res: Response) => {
       userId: getUserId(req),
       workoutType: parsed.data.workoutType,
       title: parsed.data.title,
-      plan: parsed.data.plan ?? undefined,
-      exercises: parsed.data.exercises ?? [],
+      plan: (parsed.data.plan ?? undefined) as JsonValue | undefined,
+      exercises: (parsed.data.exercises ?? []) as JsonValue,
     },
   });
 
   res.status(201).json({ data: workout });
 });
+
+// ─── Status transition rules ────────────────────────────────────────
+
+const VALID_TRANSITIONS: Record<string, string[]> = {
+  active: ['paused', 'completed', 'abandoned'],
+  paused: ['active', 'completed', 'abandoned'],
+};
 
 // ─── Update workout ─────────────────────────────────────────────────
 
@@ -106,15 +116,40 @@ workoutsRouter.patch('/:id', async (req: Request, res: Response) => {
     return;
   }
 
+  // Validate status transition
+  if (parsed.data.status && parsed.data.status !== existing.status) {
+    const allowed = VALID_TRANSITIONS[existing.status] ?? [];
+    if (!allowed.includes(parsed.data.status)) {
+      res.status(400).json({
+        error: `Cannot transition from '${existing.status}' to '${parsed.data.status}'`,
+      });
+      return;
+    }
+  }
+
+  // Auto-set completedAt and durationSeconds on completion
+  let completedAt = parsed.data.completedAt;
+  let durationSeconds = parsed.data.durationSeconds;
+  if (parsed.data.status === 'completed') {
+    if (!completedAt) {
+      completedAt = new Date().toISOString();
+    }
+    if (durationSeconds == null && existing.startedAt) {
+      durationSeconds = Math.floor(
+        (new Date(completedAt).getTime() - new Date(existing.startedAt).getTime()) / 1000,
+      );
+    }
+  }
+
   const workout = await prisma.workout.update({
     where: { id: param(req, 'id') },
     data: {
       status: parsed.data.status,
       title: parsed.data.title,
-      completedAt: parsed.data.completedAt,
-      durationSeconds: parsed.data.durationSeconds,
-      exercises: parsed.data.exercises,
-      metricsSummary: parsed.data.metricsSummary,
+      completedAt,
+      durationSeconds,
+      exercises: parsed.data.exercises as JsonValue | undefined,
+      metricsSummary: parsed.data.metricsSummary as JsonValue | undefined,
       notes: parsed.data.notes,
     },
   });
@@ -145,7 +180,7 @@ const upsertWorkoutSchema = z.object({
   workoutType: z.enum([
     'push', 'pull', 'legs', 'upper', 'lower', 'full_body',
     'hiit', 'cardio_run', 'cardio_cycle', 'cardio_row',
-    'yoga', 'mobility', 'custom',
+    'boxing', 'mobility', 'custom',
   ]).optional(),
   title: z.string().optional(),
   status: z.enum(['active', 'paused', 'completed', 'abandoned']).optional(),
@@ -177,8 +212,8 @@ workoutsRouter.put('/:id', async (req: Request, res: Response) => {
       workoutType: data.workoutType ?? 'custom',
       title: data.title,
       status: data.status,
-      plan: data.plan ?? undefined,
-      exercises: data.exercises ?? [],
+      plan: (data.plan ?? undefined) as JsonValue | undefined,
+      exercises: (data.exercises ?? []) as JsonValue,
       notes: data.notes,
     },
     update: {
@@ -187,8 +222,8 @@ workoutsRouter.put('/:id', async (req: Request, res: Response) => {
       title: data.title,
       completedAt: data.completedAt,
       durationSeconds: data.durationSeconds,
-      exercises: data.exercises,
-      metricsSummary: data.metricsSummary,
+      exercises: data.exercises as JsonValue | undefined,
+      metricsSummary: data.metricsSummary as JsonValue | undefined,
       notes: data.notes,
     },
   });

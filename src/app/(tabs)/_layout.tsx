@@ -1,6 +1,7 @@
 import { Tabs } from 'expo-router';
 import { Platform } from 'react-native';
 import * as Haptics from 'expo-haptics';
+import { Ionicons } from '@expo/vector-icons';
 import { colors } from '@/theme/colors';
 
 export default function TabLayout() {
@@ -35,6 +36,9 @@ export default function TabLayout() {
         options={{
           title: 'Home',
           tabBarLabel: 'Home',
+          tabBarIcon: ({ focused, color }) => (
+            <Ionicons name={focused ? 'home' : 'home-outline'} size={24} color={color} />
+          ),
         }}
         listeners={{ tabPress: handleTabPress }}
       />
@@ -43,6 +47,9 @@ export default function TabLayout() {
         options={{
           title: 'History',
           tabBarLabel: 'History',
+          tabBarIcon: ({ focused, color }) => (
+            <Ionicons name={focused ? 'time' : 'time-outline'} size={24} color={color} />
+          ),
         }}
         listeners={{ tabPress: handleTabPress }}
       />
@@ -51,6 +58,9 @@ export default function TabLayout() {
         options={{
           title: 'Progress',
           tabBarLabel: 'Progress',
+          tabBarIcon: ({ focused, color }) => (
+            <Ionicons name={focused ? 'bar-chart' : 'bar-chart-outline'} size={24} color={color} />
+          ),
         }}
         listeners={{ tabPress: handleTabPress }}
       />
@@ -59,6 +69,9 @@ export default function TabLayout() {
         options={{
           title: 'Profile',
           tabBarLabel: 'Profile',
+          tabBarIcon: ({ focused, color }) => (
+            <Ionicons name={focused ? 'person' : 'person-outline'} size={24} color={color} />
+          ),
         }}
         listeners={{ tabPress: handleTabPress }}
       />
