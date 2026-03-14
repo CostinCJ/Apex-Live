@@ -4,21 +4,19 @@ import { StatusBar } from 'expo-status-bar';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import * as Sentry from '@sentry/react-native';
 import { colors } from '@/theme/colors';
 import { AuthProvider, useAuthContext } from '@/features/auth/context/AuthContext';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { useSettingsStore } from '@/stores/settingsStore';
 
-try {
-  const Sentry = require('@sentry/react-native');
-  Sentry.init({
-    dsn: process.env.EXPO_PUBLIC_SENTRY_DSN ?? '',
-    enabled: process.env.NODE_ENV === 'production',
-    tracesSampleRate: 0.2,
-  });
-} catch {
-  // Sentry not available (Expo Go) — skip
-}
+Sentry.init({
+  dsn: process.env.EXPO_PUBLIC_SENTRY_DSN ?? '',
+  enabled: !__DEV__,
+  tracesSampleRate: 0.2,
+  attachScreenshot: true,
+  enableNativeFramesTracking: true,
+});
 
 function RootNavigator() {
   const { session, loading } = useAuthContext();
@@ -88,7 +86,7 @@ function RootNavigator() {
   );
 }
 
-export default function RootLayout() {
+function RootLayout() {
   return (
     <GestureHandlerRootView style={styles.root}>
       <SafeAreaProvider>
@@ -102,6 +100,8 @@ export default function RootLayout() {
     </GestureHandlerRootView>
   );
 }
+
+export default Sentry.wrap(RootLayout);
 
 const styles = StyleSheet.create({
   root: {

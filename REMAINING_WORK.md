@@ -22,7 +22,7 @@ Based on the development plan and what's been built, here's the current status:
 
 ### Still TODO (requires manual action)
 
-- **Sentry DSN** — create project at sentry.io, set `EXPO_PUBLIC_SENTRY_DSN` in `.env`
+- ~~**Sentry DSN**~~ — ✅ Done. Project `apex-live` created in `student-keg` org, DSN set in `.env`
 - **OpenAI API key** — set `OPENAI_API_KEY` in `server/.env` for voice coach
 - **iOS build** — requires Apple Developer account ($99/year): `eas build --profile development --platform ios`
 - **App Store submission** — `eas submit --platform ios` after production build

@@ -1,5 +1,6 @@
 import { Component, type ReactNode, type ErrorInfo } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
+import * as Sentry from '@sentry/react-native';
 import { colors } from '@/theme/colors';
 import { spacing, touchTarget, borderRadius } from '@/theme/spacing';
 import { typography } from '@/theme/typography';
@@ -28,6 +29,12 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo): void {
     console.error(`ErrorBoundary [${this.props.level ?? 'root'}]:`, error, errorInfo);
+    Sentry.captureException(error, {
+      contexts: {
+        react: { componentStack: errorInfo.componentStack ?? undefined },
+      },
+      tags: { boundary_level: this.props.level ?? 'root' },
+    });
     this.props.onError?.(error, errorInfo);
   }
 

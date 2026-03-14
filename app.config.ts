@@ -72,7 +72,13 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
           'Allow Apex to use Face ID to securely access your account.',
       },
     ],
-    '@sentry/react-native',
+    [
+      '@sentry/react-native',
+      {
+        organization: 'student-keg',
+        project: 'apex-live',
+      },
+    ],
   ],
   extra: {
     appEnv: APP_ENV,
