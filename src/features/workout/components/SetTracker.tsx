@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, memo } from 'react';
 import { View, Text, TextInput, Pressable, StyleSheet } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { colors } from '@/theme/colors';
@@ -15,7 +15,7 @@ interface SetTrackerProps {
   units: 'imperial' | 'metric';
 }
 
-export function SetTracker({
+export const SetTracker = memo(function SetTracker({
   exerciseName,
   completedSets,
   targetSets,
@@ -141,7 +141,7 @@ export function SetTracker({
       ) : null}
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   container: {

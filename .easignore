@@ -1,0 +1,9 @@
+server/
+supabase/
+docs/
+*.md
+.git/
+.env
+jest.config.ts
+eslint.config.js
+.prettierrc

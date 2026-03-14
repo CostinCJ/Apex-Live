@@ -18,7 +18,6 @@ export default function OnboardingScreen() {
   const step = STEPS[stepIndex] ?? 'welcome';
 
   const setFitnessLevel = useSettingsStore((s) => s.setFitnessLevel);
-  const setCoachVerbosity = useSettingsStore((s) => s.setCoachVerbosity);
   const setCoachStyle = useSettingsStore((s) => s.setCoachStyle);
   const setHasCompletedOnboarding = useSettingsStore((s) => s.setHasCompletedOnboarding);
 

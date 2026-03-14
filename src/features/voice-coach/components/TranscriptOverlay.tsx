@@ -1,4 +1,4 @@
-import { useRef, useEffect } from 'react';
+import { useRef, useEffect, memo } from 'react';
 import { View, Text, ScrollView, StyleSheet } from 'react-native';
 import { colors } from '@/theme/colors';
 import { spacing, borderRadius } from '@/theme/spacing';
@@ -15,7 +15,7 @@ interface TranscriptOverlayProps {
   visible: boolean;
 }
 
-export function TranscriptOverlay({ lines, visible }: TranscriptOverlayProps) {
+export const TranscriptOverlay = memo(function TranscriptOverlay({ lines, visible }: TranscriptOverlayProps) {
   const scrollRef = useRef<ScrollView>(null);
 
   useEffect(() => {
@@ -55,7 +55,7 @@ export function TranscriptOverlay({ lines, visible }: TranscriptOverlayProps) {
       </ScrollView>
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   container: {

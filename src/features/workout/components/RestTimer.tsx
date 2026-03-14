@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, memo } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { colors } from '@/theme/colors';
@@ -11,7 +11,7 @@ interface RestTimerProps {
   onSkip: () => void;
 }
 
-export function RestTimer({
+export const RestTimer = memo(function RestTimer({
   defaultDuration = 90,
   onComplete,
   onSkip,
@@ -19,6 +19,8 @@ export function RestTimer({
   const [remaining, setRemaining] = useState(defaultDuration);
   const [isActive, setIsActive] = useState(true);
   const hasNotifiedRef = useRef(false);
+  const onCompleteRef = useRef(onComplete);
+  onCompleteRef.current = onComplete;
 
   useEffect(() => {
     if (!isActive) return;
@@ -30,7 +32,7 @@ export function RestTimer({
           if (!hasNotifiedRef.current) {
             hasNotifiedRef.current = true;
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-            onComplete();
+            onCompleteRef.current();
           }
           return 0;
         }
@@ -48,7 +50,7 @@ export function RestTimer({
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
     return () => clearInterval(timer);
-  }, [isActive, onComplete]);
+  }, [isActive]);
 
   const handleSkip = useCallback(() => {
     setIsActive(false);
@@ -57,7 +59,7 @@ export function RestTimer({
   }, [onSkip]);
 
   const handleAddTime = useCallback((seconds: number) => {
-    setRemaining((prev) => prev + seconds);
+    setRemaining((prev) => Math.max(0, prev + seconds));
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   }, []);
 
@@ -112,7 +114,7 @@ export function RestTimer({
       </Pressable>
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   container: {

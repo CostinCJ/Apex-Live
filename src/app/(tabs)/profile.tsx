@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, Pressable, Switch, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, Pressable, Switch } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from '@/theme/colors';
 import { spacing, touchTarget, borderRadius } from '@/theme/spacing';

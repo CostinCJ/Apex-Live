@@ -22,7 +22,7 @@ export const WS_KEEPALIVE_INTERVAL = 25000;
 /** MMKV workout autosave interval (ms) */
 export const WORKOUT_AUTOSAVE_INTERVAL = 30000;
 
-/** Batch size for Supabase metric writes */
+/** Batch size for metric writes */
 export const METRICS_BATCH_SIZE = 50;
 
 /** Metrics flush interval (ms) */

@@ -9,6 +9,17 @@ import { AuthProvider, useAuthContext } from '@/features/auth/context/AuthContex
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { useSettingsStore } from '@/stores/settingsStore';
 
+try {
+  const Sentry = require('@sentry/react-native');
+  Sentry.init({
+    dsn: process.env.EXPO_PUBLIC_SENTRY_DSN ?? '',
+    enabled: process.env.NODE_ENV === 'production',
+    tracesSampleRate: 0.2,
+  });
+} catch {
+  // Sentry not available (Expo Go) — skip
+}
+
 function RootNavigator() {
   const { session, loading } = useAuthContext();
   const hasCompletedOnboarding = useSettingsStore((s) => s.hasCompletedOnboarding);
@@ -32,7 +43,7 @@ function RootNavigator() {
     } else if (session && !hasCompletedOnboarding && !inOnboarding) {
       router.replace('/onboarding');
     }
-  }, [session, loading, segments, hasCompletedOnboarding]);
+  }, [session, loading, segments, hasCompletedOnboarding, router]);
 
   if (loading) {
     return (
@@ -65,6 +76,12 @@ function RootNavigator() {
           presentation: 'fullScreenModal',
           animation: 'slide_from_bottom',
           gestureEnabled: false,
+        }}
+      />
+      <Stack.Screen
+        name="workout/detail/[id]"
+        options={{
+          animation: 'slide_from_right',
         }}
       />
     </Stack>

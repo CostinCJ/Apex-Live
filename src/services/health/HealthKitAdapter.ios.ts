@@ -4,17 +4,16 @@ import type {
   HealthPermissionResult,
   HealthCapabilities,
   BiometricSnapshot,
-  HeartRateZone,
 } from '@/types/health';
 import { getHeartRateZone } from '@/types/health';
 import type { IHealthService, MetricCallback, Unsubscribe } from './IHealthService';
 import { HEALTH_POLL_INTERVAL_ACTIVE } from '@/utils/constants';
 
 // react-native-health is imported dynamically to prevent crashes on Android
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports
 let AppleHealthKit: typeof import('react-native-health').default | null = null;
 
 try {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   AppleHealthKit = require('react-native-health').default;
 } catch {
   // Not available

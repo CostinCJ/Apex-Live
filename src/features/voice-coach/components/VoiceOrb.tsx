@@ -100,6 +100,7 @@ export function VoiceOrb({ state, size = 120 }: VoiceOrbProps) {
         useNativeDriver: true,
       }).start();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- scaleAnim and opacityAnim are stable Animated.Value refs
   }, [state]);
 
   const orbColor = stateColors[state];

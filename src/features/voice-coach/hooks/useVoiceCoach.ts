@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef } from 'react';
-import { supabase } from '@/services/supabase/client';
+import { api } from '@/services/api/client';
 import { OpenAIRealtimeAdapter } from '@/services/voice/OpenAIRealtimeAdapter';
 import { useRealtimeStore } from '@/stores/realtimeStore';
 import { useAuthContext } from '@/features/auth/context/AuthContext';
@@ -31,7 +31,7 @@ export function useVoiceCoach() {
   const setCoachMessage = useRealtimeStore((s) => s.setCoachMessage);
 
   const connect = useCallback(async () => {
-    if (!session?.access_token) return;
+    if (!session) return;
 
     // Request mic permission
     const hasPermission = await requestMic();
@@ -40,9 +40,15 @@ export function useVoiceCoach() {
     try {
       setVoiceConnectionState('connecting');
 
-      // Get ephemeral token from Edge Function
-      const { data, error } = await supabase.functions.invoke('ai-proxy', {
-        body: { model: 'gpt-4o-realtime-preview', voice: 'alloy' },
+      // Get ephemeral token from API server
+      const { data, error } = await api.post<{
+        token: string;
+        url: string;
+        expires_at: string;
+        session_id: string;
+      }>('/api/ai/session', {
+        model: 'gpt-4o-realtime-preview',
+        voice: 'alloy',
       });
 
       if (error || !data?.token) {
@@ -87,15 +93,16 @@ export function useVoiceCoach() {
         }
       });
 
-      await adapter.connect(data.token as string);
+      await adapter.connect(data.token);
 
       // Start periodic context updates
       startContextUpdates();
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('Failed to connect voice coach:', error);
       setVoiceConnectionState('error');
     }
-  }, [session?.access_token]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- Zustand actions and refs are stable
+  }, [session]);
 
   const disconnect = useCallback(async () => {
     stopContextUpdates();
@@ -107,6 +114,7 @@ export function useVoiceCoach() {
     setCoachState('idle');
     setListening(false);
     setSpeaking(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- Zustand actions are stable refs
   }, []);
 
   const toggleListening = useCallback(() => {
@@ -122,6 +130,7 @@ export function useVoiceCoach() {
       setListening(true);
       setCoachState('listening');
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- Zustand actions are stable refs
   }, [connectionState, isListening]);
 
   const startContinuousListening = useCallback(() => {
@@ -131,6 +140,7 @@ export function useVoiceCoach() {
     adapter.startListening();
     setListening(true);
     setCoachState('listening');
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- Zustand actions are stable refs
   }, [connectionState]);
 
   // Build current system prompt
@@ -165,7 +175,8 @@ export function useVoiceCoach() {
     stopContextUpdates();
     contextTimerRef.current = setInterval(() => {
       const adapter = adapterRef.current;
-      if (!adapter || connectionState !== 'connected') return;
+      const currentConnectionState = useRealtimeStore.getState().voiceConnectionState;
+      if (!adapter || currentConnectionState !== 'connected') return;
 
       const store = useRealtimeStore.getState();
       const context: VoiceContext = {
@@ -188,6 +199,7 @@ export function useVoiceCoach() {
         lastContextRef.current = context;
       }
     }, COACH_CONTEXT_UPDATE_INTERVAL);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reads state from store directly, Zustand actions are stable
   }, [connectionState]);
 
   const stopContextUpdates = useCallback(() => {
@@ -202,6 +214,7 @@ export function useVoiceCoach() {
     return () => {
       void disconnect();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- cleanup only on unmount
   }, []);
 
   return {

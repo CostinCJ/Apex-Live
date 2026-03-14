@@ -1,10 +1,9 @@
 import { useEffect, useState, useCallback } from 'react';
-import { supabase } from '@/services/supabase/client';
-import type { Session, User } from '@supabase/supabase-js';
+import { auth, onAuthStateChange, type AuthUser } from '@/services/api/client';
 
 interface AuthState {
-  session: Session | null;
-  user: User | null;
+  session: { access_token: string } | null;
+  user: AuthUser | null;
   loading: boolean;
   error: string | null;
 }
@@ -19,33 +18,51 @@ export function useAuth() {
 
   useEffect(() => {
     // Get initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setState({
-        session,
-        user: session?.user ?? null,
-        loading: false,
-        error: null,
-      });
+    auth.getSession().then(({ data, error }) => {
+      if (data?.user) {
+        setState({
+          session: { access_token: 'active' },
+          user: data.user,
+          loading: false,
+          error: null,
+        });
+      } else {
+        setState({
+          session: null,
+          user: null,
+          loading: false,
+          error: error?.message ?? null,
+        });
+      }
     });
 
     // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
-        setState((prev) => ({
-          ...prev,
-          session,
-          user: session?.user ?? null,
+    const unsubscribe = onAuthStateChange((event) => {
+      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+        auth.getSession().then(({ data }) => {
+          setState((prev) => ({
+            ...prev,
+            session: data?.user ? { access_token: 'active' } : null,
+            user: data?.user ?? null,
+            loading: false,
+          }));
+        });
+      } else if (event === 'SIGNED_OUT') {
+        setState({
+          session: null,
+          user: null,
           loading: false,
-        }));
-      },
-    );
+          error: null,
+        });
+      }
+    });
 
-    return () => subscription.unsubscribe();
+    return unsubscribe;
   }, []);
 
   const signIn = useCallback(async (email: string, password: string) => {
     setState((prev) => ({ ...prev, loading: true, error: null }));
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    const { error } = await auth.signIn(email, password);
     if (error) {
       setState((prev) => ({ ...prev, loading: false, error: error.message }));
     }
@@ -53,7 +70,7 @@ export function useAuth() {
 
   const signUp = useCallback(async (email: string, password: string) => {
     setState((prev) => ({ ...prev, loading: true, error: null }));
-    const { error } = await supabase.auth.signUp({ email, password });
+    const { error } = await auth.signUp(email, password);
     if (error) {
       setState((prev) => ({ ...prev, loading: false, error: error.message }));
     }
@@ -61,10 +78,7 @@ export function useAuth() {
 
   const signOut = useCallback(async () => {
     setState((prev) => ({ ...prev, loading: true, error: null }));
-    const { error } = await supabase.auth.signOut();
-    if (error) {
-      setState((prev) => ({ ...prev, loading: false, error: error.message }));
-    }
+    await auth.signOut();
   }, []);
 
   const clearError = useCallback(() => {

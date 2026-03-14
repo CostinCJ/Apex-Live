@@ -21,7 +21,7 @@ function formatDuration(seconds: number): string {
   return `${m}m ${s}s`;
 }
 
-function calculateTotalVolume(exercises: ExerciseRecord[], units: string): number {
+function calculateTotalVolume(exercises: ExerciseRecord[], _units: string): number {
   return exercises.reduce((total, ex) => {
     return total + ex.sets.reduce((setTotal, set) => {
       return setTotal + (set.weight ?? 0) * (set.reps ?? 0);

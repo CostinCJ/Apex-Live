@@ -1,6 +1,5 @@
 import { useEffect, useRef, useCallback } from 'react';
 import {
-  View,
   Text,
   Animated,
   StyleSheet,
@@ -73,6 +72,7 @@ export function Toast({ message, onDismiss }: ToastProps) {
     // Auto-dismiss
     const timer = setTimeout(dismiss, message.duration ?? 3000);
     return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- animate only on new message id, deps are stable refs
   }, [message?.id]);
 
   if (!message) return null;

@@ -1,0 +1,262 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums ──────────────────────────────────────────────────────────
+
+enum WorkoutType {
+  push
+  pull
+  legs
+  upper
+  lower
+  full_body
+  hiit
+  cardio_run
+  cardio_cycle
+  cardio_row
+  yoga
+  mobility
+  custom
+
+  @@map("workout_type")
+}
+
+enum MetricType {
+  heart_rate
+  calories
+  distance
+  pace
+  speed
+  cadence
+  power
+  elevation
+  rep_count
+  weight
+  rpe
+
+  @@map("metric_type")
+}
+
+enum ConversationRole {
+  user
+  assistant
+  system
+
+  @@map("conversation_role")
+}
+
+enum WorkoutStatus {
+  active
+  paused
+  completed
+  abandoned
+
+  @@map("workout_status")
+}
+
+// ─── Users ──────────────────────────────────────────────────────────
+
+model User {
+  id            String    @id @default(uuid()) @db.Uuid
+  email         String    @unique
+  passwordHash  String    @map("password_hash")
+  displayName   String?   @map("display_name")
+  avatarUrl     String?   @map("avatar_url")
+  dateOfBirth   DateTime? @map("date_of_birth") @db.Date
+  gender        String?
+  heightCm      Decimal?  @map("height_cm") @db.Decimal(5, 1)
+  weightKg      Decimal?  @map("weight_kg") @db.Decimal(5, 1)
+  fitnessLevel  String    @default("intermediate") @map("fitness_level")
+  preferences   Json      @default("{\"units\": \"imperial\", \"weekly_goal_days\": 4, \"preferred_workout_types\": [], \"rest_day_reminders\": true}")
+  voiceSettings Json      @default("{\"voice_id\": \"default\", \"speed\": 1.0, \"coaching_style\": \"motivational\", \"verbosity\": \"moderate\", \"language\": \"en-US\"}") @map("voice_settings")
+  timezone      String    @default("UTC")
+  units         String    @default("imperial")
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt     DateTime  @updatedAt @map("updated_at") @db.Timestamptz()
+
+  // Auth
+  refreshTokens RefreshToken[]
+
+  // Relations
+  workouts           Workout[]
+  workoutMetrics     WorkoutMetric[]
+  personalRecords    PersonalRecord[]
+  coachConversations CoachConversation[]
+  dailySummaries     DailyWorkoutSummary[]
+
+  @@map("users")
+}
+
+// ─── Refresh Tokens ─────────────────────────────────────────────────
+
+model RefreshToken {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  token     String   @unique
+  expiresAt DateTime @map("expires_at") @db.Timestamptz()
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("refresh_tokens")
+}
+
+// ─── Workouts ───────────────────────────────────────────────────────
+
+model Workout {
+  id              String        @id @default(uuid()) @db.Uuid
+  userId          String        @map("user_id") @db.Uuid
+  workoutType     WorkoutType   @map("workout_type")
+  status          WorkoutStatus @default(active)
+  title           String?
+  startedAt       DateTime      @default(now()) @map("started_at") @db.Timestamptz()
+  completedAt     DateTime?     @map("completed_at") @db.Timestamptz()
+  durationSeconds Int?          @map("duration_seconds")
+  plan            Json?
+  exercises       Json          @default("[]")
+  metricsSummary  Json          @default("{}") @map("metrics_summary")
+  notes           String?
+  deviceInfo      Json?         @map("device_info")
+  createdAt       DateTime      @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt       DateTime      @updatedAt @map("updated_at") @db.Timestamptz()
+
+  user             User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workoutMetrics   WorkoutMetric[]
+  personalRecords  PersonalRecord[]
+  coachConversations CoachConversation[]
+
+  @@index([userId, workoutType, startedAt(sort: Desc)], map: "idx_workouts_user_type_started")
+  @@index([userId, startedAt(sort: Desc)], map: "idx_workouts_user_started")
+  @@index([status], map: "idx_workouts_active")
+  @@map("workouts")
+}
+
+// ─── Workout Metrics (time-series) ──────────────────────────────────
+
+model WorkoutMetric {
+  id         BigInt     @id @default(autoincrement())
+  workoutId  String     @map("workout_id") @db.Uuid
+  userId     String     @map("user_id") @db.Uuid
+  metricType MetricType @map("metric_type")
+  value      Decimal    @db.Decimal(10, 2)
+  unit       String?
+  recordedAt DateTime   @default(now()) @map("recorded_at") @db.Timestamptz()
+  metadata   Json?
+
+  workout Workout @relation(fields: [workoutId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([workoutId, recordedAt], map: "idx_wm_workout_recorded")
+  @@index([userId, metricType, recordedAt(sort: Desc)], map: "idx_wm_user_type_recorded")
+  @@map("workout_metrics")
+}
+
+// ─── Downsampled Metrics (1-min buckets for old data) ───────────────
+
+model WorkoutMetricDownsampled {
+  workoutId   String     @map("workout_id") @db.Uuid
+  userId      String     @map("user_id") @db.Uuid
+  metricType  MetricType @map("metric_type")
+  bucketStart DateTime   @map("bucket_start") @db.Timestamptz()
+  bucketSeconds Int      @default(60) @map("bucket_seconds")
+  avgValue    Decimal    @map("avg_value") @db.Decimal(10, 2)
+  minValue    Decimal    @map("min_value") @db.Decimal(10, 2)
+  maxValue    Decimal    @map("max_value") @db.Decimal(10, 2)
+  sampleCount Int        @default(1) @map("sample_count")
+
+  @@id([workoutId, metricType, bucketStart])
+  @@map("workout_metrics_downsampled")
+}
+
+// ─── Personal Records ───────────────────────────────────────────────
+
+model PersonalRecord {
+  id            String   @id @default(uuid()) @db.Uuid
+  userId        String   @map("user_id") @db.Uuid
+  exerciseName  String   @map("exercise_name")
+  recordType    String   @map("record_type")
+  value         Decimal  @db.Decimal(10, 2)
+  unit          String
+  achievedAt    DateTime @default(now()) @map("achieved_at") @db.Timestamptz()
+  workoutId     String?  @map("workout_id") @db.Uuid
+  previousValue Decimal? @map("previous_value") @db.Decimal(10, 2)
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workout Workout? @relation(fields: [workoutId], references: [id], onDelete: SetNull)
+
+  @@unique([userId, exerciseName, recordType])
+  @@index([userId, exerciseName], map: "idx_pr_user_exercise")
+  @@map("personal_records")
+}
+
+// ─── Coach Conversations ────────────────────────────────────────────
+
+model CoachConversation {
+  id           String    @id @default(uuid()) @db.Uuid
+  userId       String    @map("user_id") @db.Uuid
+  workoutId    String?   @map("workout_id") @db.Uuid
+  title        String?
+  startedAt    DateTime  @default(now()) @map("started_at") @db.Timestamptz()
+  endedAt      DateTime? @map("ended_at") @db.Timestamptz()
+  messageCount Int       @default(0) @map("message_count")
+  summary      String?
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt    DateTime  @updatedAt @map("updated_at") @db.Timestamptz()
+
+  user     User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workout  Workout?       @relation(fields: [workoutId], references: [id], onDelete: SetNull)
+  messages CoachMessage[]
+
+  @@index([userId, startedAt(sort: Desc)], map: "idx_cc_user_started")
+  @@map("coach_conversations")
+}
+
+// ─── Coach Messages ─────────────────────────────────────────────────
+
+model CoachMessage {
+  id              String           @id @default(uuid()) @db.Uuid
+  conversationId  String           @map("conversation_id") @db.Uuid
+  role            ConversationRole
+  content         String
+  audioDurationMs Int?             @map("audio_duration_ms")
+  tokenCount      Int?             @map("token_count")
+  metadata        Json?
+  createdAt       DateTime         @default(now()) @map("created_at") @db.Timestamptz()
+
+  conversation CoachConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt], map: "idx_cm_conversation_created")
+  @@map("coach_messages")
+}
+
+// ─── Daily Workout Summaries ────────────────────────────────────────
+
+model DailyWorkoutSummary {
+  id            String   @id @default(uuid()) @db.Uuid
+  userId        String   @map("user_id") @db.Uuid
+  date          DateTime @db.Date
+  workoutCount  Int      @default(0) @map("workout_count")
+  totalDuration Int      @default(0) @map("total_duration")
+  totalCalories Decimal  @default(0) @map("total_calories") @db.Decimal(8, 1)
+  totalDistance  Decimal  @default(0) @map("total_distance") @db.Decimal(10, 1)
+  totalVolume   Decimal  @default(0) @map("total_volume") @db.Decimal(12, 1)
+  avgHeartRate  Decimal? @map("avg_heart_rate") @db.Decimal(5, 1)
+  workoutTypes  Json     @default("[]") @map("workout_types")
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt     DateTime @updatedAt @map("updated_at") @db.Timestamptz()
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, date])
+  @@index([userId, date(sort: Desc)], map: "idx_daily_user_date")
+  @@map("daily_workout_summaries")
+}

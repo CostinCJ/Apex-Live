@@ -1,11 +1,12 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { View, Text, ScrollView, StyleSheet, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from '@/theme/colors';
 import { spacing, borderRadius } from '@/theme/spacing';
 import { typography } from '@/theme/typography';
-import { supabase } from '@/services/supabase/client';
+import { api } from '@/services/api/client';
 import { useAuthContext } from '@/features/auth/context/AuthContext';
+import { WeeklyChart } from '@/features/progress/components/WeeklyChart';
 import type { Tables } from '@/types/database';
 
 type DailySummary = Tables<'daily_workout_summaries'>;
@@ -13,12 +14,45 @@ type PersonalRecord = Tables<'personal_records'>;
 
 type TimeRange = '7d' | '30d' | '90d';
 
+const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+function getLast7DaysLabels(): string[] {
+  const labels: string[] = [];
+  const today = new Date();
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(today);
+    d.setDate(d.getDate() - i);
+    labels.push(DAY_LABELS[d.getDay() === 0 ? 6 : d.getDay() - 1] ?? '');
+  }
+  return labels;
+}
+
+function bucketByDay(data: DailySummary[], field: 'total_duration' | 'total_calories' | 'workout_count'): { label: string; value: number }[] {
+  const labels = getLast7DaysLabels();
+  const today = new Date();
+  const buckets = new Map<string, number>();
+
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(today);
+    d.setDate(d.getDate() - i);
+    buckets.set(d.toISOString().split('T')[0] ?? '', 0);
+  }
+
+  for (const row of data) {
+    const dateKey = typeof row.date === 'string' ? row.date.split('T')[0] ?? '' : '';
+    if (buckets.has(dateKey)) {
+      buckets.set(dateKey, Number(row[field]) || 0);
+    }
+  }
+
+  const values = [...buckets.values()];
+  return labels.map((label, i) => ({ label, value: values[i] ?? 0 }));
+}
+
 export default function ProgressScreen() {
   const { user } = useAuthContext();
   const [timeRange, setTimeRange] = useState<TimeRange>('30d');
-  const [totalWorkouts, setTotalWorkouts] = useState(0);
-  const [totalDuration, setTotalDuration] = useState(0);
-  const [totalCalories, setTotalCalories] = useState(0);
+  const [summaries, setSummaries] = useState<DailySummary[]>([]);
   const [records, setRecords] = useState<PersonalRecord[]>([]);
 
   const fetchData = useCallback(async () => {
@@ -29,30 +63,55 @@ export default function ProgressScreen() {
     since.setDate(since.getDate() - days);
 
     const [summaryResult, recordsResult] = await Promise.all([
-      supabase
-        .from('daily_workout_summaries')
-        .select('*')
-        .eq('user_id', user.id)
-        .gte('date', since.toISOString().split('T')[0] ?? '')
-        .order('date', { ascending: false }),
-      supabase
-        .from('personal_records')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('achieved_at', { ascending: false })
-        .limit(10),
+      api.get<{ data: DailySummary[] }>(
+        `/api/progress/summaries?since=${since.toISOString().split('T')[0] ?? ''}`,
+      ),
+      api.get<{ data: PersonalRecord[] }>(
+        '/api/progress/records?limit=10',
+      ),
     ]);
 
-    const data: DailySummary[] = summaryResult.data ?? [];
-    setRecords(recordsResult.data ?? []);
-    setTotalWorkouts(data.reduce((sum, d) => sum + d.workout_count, 0));
-    setTotalDuration(data.reduce((sum, d) => sum + d.total_duration, 0));
-    setTotalCalories(data.reduce((sum, d) => sum + d.total_calories, 0));
+    setSummaries(summaryResult.data?.data ?? []);
+    setRecords(recordsResult.data?.data ?? []);
   }, [user, timeRange]);
 
   useEffect(() => {
     void fetchData();
   }, [fetchData]);
+
+  const totalWorkouts = useMemo(
+    () => summaries.reduce((sum, d) => sum + d.workout_count, 0),
+    [summaries],
+  );
+  const totalDuration = useMemo(
+    () => summaries.reduce((sum, d) => sum + d.total_duration, 0),
+    [summaries],
+  );
+  const totalCalories = useMemo(
+    () => summaries.reduce((sum, d) => sum + Number(d.total_calories), 0),
+    [summaries],
+  );
+
+  // Chart data — last 7 days regardless of range selector
+  const last7 = useMemo(() => {
+    const since = new Date();
+    since.setDate(since.getDate() - 7);
+    return summaries.filter((s) => {
+      const d = typeof s.date === 'string' ? s.date.split('T')[0] ?? '' : '';
+      return d >= (since.toISOString().split('T')[0] ?? '');
+    });
+  }, [summaries]);
+
+  const durationChart = useMemo(() => {
+    const data = bucketByDay(last7, 'total_duration');
+    // Convert seconds to minutes for display
+    return data.map((d) => ({ ...d, value: Math.round(d.value / 60) }));
+  }, [last7]);
+
+  const caloriesChart = useMemo(() => bucketByDay(last7, 'total_calories'), [last7]);
+
+  const maxDuration = useMemo(() => Math.max(...durationChart.map((d) => d.value), 1), [durationChart]);
+  const maxCalories = useMemo(() => Math.max(...caloriesChart.map((d) => d.value), 1), [caloriesChart]);
 
   const formatDuration = (seconds: number): string => {
     const h = Math.floor(seconds / 3600);
@@ -106,6 +165,21 @@ export default function ProgressScreen() {
           </View>
         </View>
 
+        {/* Charts */}
+        <WeeklyChart
+          title="Duration (last 7 days)"
+          data={durationChart}
+          maxValue={maxDuration}
+          unit="minutes"
+        />
+
+        <WeeklyChart
+          title="Calories (last 7 days)"
+          data={caloriesChart}
+          maxValue={maxCalories}
+          unit="kcal"
+        />
+
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Personal Records</Text>
           {records.length > 0 ? (
@@ -130,102 +204,35 @@ export default function ProgressScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  scrollContent: {
-    padding: spacing.lg,
-  },
-  title: {
-    ...typography.title,
-    color: colors.textPrimary,
-    marginBottom: spacing.lg,
-  },
-  rangeRow: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-    marginBottom: spacing.xl,
-  },
+  container: { flex: 1, backgroundColor: colors.background },
+  scrollContent: { padding: spacing.lg },
+  title: { ...typography.title, color: colors.textPrimary, marginBottom: spacing.lg },
+  rangeRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.xl },
   rangeButton: {
-    flex: 1,
-    paddingVertical: spacing.sm,
-    backgroundColor: colors.surface,
-    borderRadius: borderRadius.md,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: colors.border,
+    flex: 1, paddingVertical: spacing.sm, backgroundColor: colors.surface,
+    borderRadius: borderRadius.md, alignItems: 'center', borderWidth: 1, borderColor: colors.border,
   },
-  rangeButtonActive: {
-    backgroundColor: colors.primary + '20',
-    borderColor: colors.primary,
-  },
-  rangeText: {
-    ...typography.caption,
-    color: colors.textTertiary,
-    fontWeight: '600',
-  },
-  rangeTextActive: {
-    color: colors.primary,
-  },
-  statsRow: {
-    flexDirection: 'row',
-    gap: spacing.md,
-    marginBottom: spacing.xl,
-  },
+  rangeButtonActive: { backgroundColor: colors.primary + '20', borderColor: colors.primary },
+  rangeText: { ...typography.caption, color: colors.textTertiary, fontWeight: '600' },
+  rangeTextActive: { color: colors.primary },
+  statsRow: { flexDirection: 'row', gap: spacing.md, marginBottom: spacing.xl },
   statCard: {
-    flex: 1,
-    backgroundColor: colors.surface,
-    borderRadius: borderRadius.lg,
-    padding: spacing.lg,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: colors.border,
+    flex: 1, backgroundColor: colors.surface, borderRadius: borderRadius.lg,
+    padding: spacing.lg, alignItems: 'center', borderWidth: 1, borderColor: colors.border,
   },
-  statValue: {
-    ...typography.metricMedium,
-    color: colors.textPrimary,
-  },
-  statLabel: {
-    ...typography.metricLabel,
-    color: colors.textTertiary,
-    marginTop: spacing.xs,
-  },
+  statValue: { ...typography.metricMedium, color: colors.textPrimary },
+  statLabel: { ...typography.metricLabel, color: colors.textTertiary, marginTop: spacing.xs },
   section: {
-    backgroundColor: colors.surface,
-    borderRadius: borderRadius.lg,
-    padding: spacing.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
+    backgroundColor: colors.surface, borderRadius: borderRadius.lg, padding: spacing.lg,
+    borderWidth: 1, borderColor: colors.border,
   },
-  sectionTitle: {
-    ...typography.heading,
-    color: colors.textPrimary,
-    marginBottom: spacing.md,
-  },
+  sectionTitle: { ...typography.heading, color: colors.textPrimary, marginBottom: spacing.md },
   prRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: spacing.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border,
   },
-  prExercise: {
-    ...typography.body,
-    color: colors.textPrimary,
-  },
-  prType: {
-    ...typography.caption,
-    color: colors.textTertiary,
-  },
-  prValue: {
-    ...typography.body,
-    color: colors.primary,
-    fontWeight: '700',
-  },
-  emptyText: {
-    ...typography.body,
-    color: colors.textTertiary,
-  },
+  prExercise: { ...typography.body, color: colors.textPrimary },
+  prType: { ...typography.caption, color: colors.textTertiary },
+  prValue: { ...typography.body, color: colors.primary, fontWeight: '700' },
+  emptyText: { ...typography.body, color: colors.textTertiary },
 });

@@ -168,6 +168,7 @@ export class RealtimeWebSocket {
     this.reconnectAttempts++;
 
     this.reconnectTimer = setTimeout(() => {
+      if (this.intentionalClose) return;
       this.createConnection();
     }, delay);
   }

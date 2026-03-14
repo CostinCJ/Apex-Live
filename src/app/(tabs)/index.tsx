@@ -21,7 +21,7 @@ const quickStartWorkouts: { type: WorkoutType; label: string; emoji: string }[] 
 export default function HomeScreen() {
   const router = useRouter();
 
-  const handleQuickStart = (type: WorkoutType, label: string) => {
+  const handleQuickStart = (type: WorkoutType, _label: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     router.push(`/workout/${type}`);
   };

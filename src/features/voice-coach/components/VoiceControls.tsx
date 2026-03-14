@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { View, Pressable, Text, StyleSheet } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { colors } from '@/theme/colors';
@@ -14,7 +15,7 @@ interface VoiceControlsProps {
   onToggleListening: () => void;
 }
 
-export function VoiceControls({
+export const VoiceControls = memo(function VoiceControls({
   connectionState,
   coachState,
   isListening,
@@ -103,7 +104,7 @@ export function VoiceControls({
       ) : null}
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   container: {

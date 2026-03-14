@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { supabase } from './client';
+import { api } from './client';
 
 interface QueuedOperation {
   id: string;
@@ -59,19 +59,20 @@ export class SyncQueue {
         let result;
 
         if (op.type === 'insert') {
-          result = await supabase.from(op.table as 'workouts').insert(op.data as never);
+          result = await api.post(`/api/${op.table}`, op.data);
         } else if (op.type === 'update') {
           const { id, ...rest } = op.data;
-          result = await supabase
-            .from(op.table as 'workouts')
-            .update(rest as never)
-            .eq('id', id as string);
+          result = await api.patch(`/api/${op.table}/${id as string}`, rest);
         } else {
-          result = await supabase.from(op.table as 'workouts').upsert(op.data as never);
+          // upsert
+          const id = op.data.id as string | undefined;
+          result = id
+            ? await api.put(`/api/${op.table}/${id}`, op.data)
+            : await api.post(`/api/${op.table}`, op.data);
         }
 
         if (result.error) {
-          throw result.error;
+          throw new Error(result.error.message);
         }
 
         // Remove from queue on success
@@ -81,6 +82,9 @@ export class SyncQueue {
         op.retryCount++;
 
         if (op.retryCount < MAX_RETRIES) {
+          // Exponential backoff before next retry
+          const delay = Math.min(1000 * Math.pow(2, op.retryCount), 30000);
+          await new Promise((r) => setTimeout(r, delay));
           failed.push(op);
         } else {
           console.error(`Dropping operation after ${MAX_RETRIES} retries:`, op);

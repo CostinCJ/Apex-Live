@@ -1,4 +1,5 @@
-import { Platform, TextStyle } from 'react-native';
+import { Platform } from 'react-native';
+import type { TextStyle } from 'react-native';
 
 const monoFont = Platform.select({
   ios: 'SF Mono',

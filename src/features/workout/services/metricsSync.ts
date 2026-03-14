@@ -1,4 +1,4 @@
-import { supabase } from '@/services/supabase/client';
+import { api } from '@/services/api/client';
 import { METRICS_BATCH_SIZE, METRICS_FLUSH_INTERVAL } from '@/utils/constants';
 
 interface PendingMetric {
@@ -10,9 +10,13 @@ interface PendingMetric {
   recorded_at: string;
 }
 
+const MAX_BUFFER_SIZE = 1000;
+const MAX_FINAL_FLUSH_ITERATIONS = 10;
+
 export class MetricsSyncService {
   private buffer: PendingMetric[] = [];
   private flushTimer: ReturnType<typeof setInterval> | null = null;
+  private flushing = false;
 
   start(): void {
     this.flushTimer = setInterval(() => {
@@ -28,6 +32,10 @@ export class MetricsSyncService {
   }
 
   addMetric(metric: PendingMetric): void {
+    // Cap buffer size to prevent unbounded memory growth
+    if (this.buffer.length >= MAX_BUFFER_SIZE) {
+      this.buffer.splice(0, this.buffer.length - MAX_BUFFER_SIZE + 1);
+    }
     this.buffer.push(metric);
 
     if (this.buffer.length >= METRICS_BATCH_SIZE) {
@@ -36,40 +44,42 @@ export class MetricsSyncService {
   }
 
   async flush(): Promise<void> {
-    if (this.buffer.length === 0) return;
+    if (this.buffer.length === 0 || this.flushing) return;
 
+    this.flushing = true;
     const batch = this.buffer.splice(0, METRICS_BATCH_SIZE);
 
     try {
-      const { error } = await supabase
-        .from('workout_metrics')
-        .insert(
-          batch.map((m) => ({
-            workout_id: m.workout_id,
-            user_id: m.user_id,
-            metric_type: m.metric_type as 'heart_rate',
-            value: m.value,
-            unit: m.unit,
-            recorded_at: m.recorded_at,
-          })),
-        );
+      const { error } = await api.post('/api/metrics/batch', {
+        metrics: batch.map((m) => ({
+          workoutId: m.workout_id,
+          metricType: m.metric_type,
+          value: m.value,
+          unit: m.unit,
+          recordedAt: m.recorded_at,
+        })),
+      });
 
       if (error) {
         console.error('Metrics flush error:', error);
         // Put failed metrics back at start of buffer for retry
-        this.buffer.unshift(...batch);
+        this.buffer = [...batch, ...this.buffer];
       }
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('Metrics sync error:', error);
-      this.buffer.unshift(...batch);
+      this.buffer = [...batch, ...this.buffer];
+    } finally {
+      this.flushing = false;
     }
   }
 
   async finalFlush(): Promise<void> {
     this.stop();
-    // Flush all remaining in batches
-    while (this.buffer.length > 0) {
+    // Flush all remaining in batches, with a max iteration guard
+    let iterations = 0;
+    while (this.buffer.length > 0 && iterations < MAX_FINAL_FLUSH_ITERATIONS) {
       await this.flush();
+      iterations++;
     }
   }
 

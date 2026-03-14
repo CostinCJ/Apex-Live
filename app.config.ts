@@ -72,15 +72,16 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
           'Allow Apex to use Face ID to securely access your account.',
       },
     ],
+    '@sentry/react-native',
   ],
   extra: {
     appEnv: APP_ENV,
     eas: {
-      projectId: 'your-eas-project-id',
+      projectId: 'b87c63c3-e214-4d7c-9063-ba2b2bc3ceaf',
     },
   },
   updates: {
-    url: 'https://u.expo.dev/your-eas-project-id',
+    url: 'https://u.expo.dev/b87c63c3-e214-4d7c-9063-ba2b2bc3ceaf',
   },
   runtimeVersion: {
     policy: 'appVersion' as const,

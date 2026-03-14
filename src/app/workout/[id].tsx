@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -8,6 +8,8 @@ import { colors } from '@/theme/colors';
 import { spacing, touchTarget, borderRadius } from '@/theme/spacing';
 import { typography } from '@/theme/typography';
 import { useRealtimeStore } from '@/stores/realtimeStore';
+import { startBackgroundKeepAlive, stopBackgroundKeepAlive } from '@/services/voice/BackgroundKeepAlive';
+import { useAnimatedTimer } from '@/features/workout/hooks/useAnimatedTimer';
 import { useVoiceCoach } from '@/features/voice-coach/hooks/useVoiceCoach';
 import { VoiceOrb } from '@/features/voice-coach/components/VoiceOrb';
 import { VoiceControls } from '@/features/voice-coach/components/VoiceControls';
@@ -19,27 +21,22 @@ interface TranscriptLine {
   timestamp: number;
 }
 
-function formatTime(totalSeconds: number): string {
-  const mins = Math.floor(totalSeconds / 60);
-  const secs = totalSeconds % 60;
-  return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-}
-
 export default function ActiveWorkoutScreen() {
   useKeepAwake();
 
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [transcriptLines, setTranscriptLines] = useState<TranscriptLine[]>([]);
   const [showTranscript, setShowTranscript] = useState(true);
 
-  const elapsedSeconds = useRealtimeStore((s) => s.elapsedSeconds);
   const heartRate = useRealtimeStore((s) => s.heartRate);
   const caloriesBurned = useRealtimeStore((s) => s.caloriesBurned);
-  const setElapsedSeconds = useRealtimeStore((s) => s.setElapsedSeconds);
   const setTimerRunning = useRealtimeStore((s) => s.setTimerRunning);
   const resetRealtime = useRealtimeStore((s) => s.reset);
+
+  // Reanimated-powered timer (syncs to store at 1Hz for display)
+  useAnimatedTimer();
+  const elapsedSeconds = useRealtimeStore((s) => s.elapsedSeconds);
 
   const {
     connectionState,
@@ -52,17 +49,16 @@ export default function ActiveWorkoutScreen() {
     toggleListening,
   } = useVoiceCoach();
 
-  // Start workout timer
+  // Background keepalive
   useEffect(() => {
     setTimerRunning(true);
-    timerRef.current = setInterval(() => {
-      setElapsedSeconds(useRealtimeStore.getState().elapsedSeconds + 1);
-    }, 1000);
+    void startBackgroundKeepAlive();
 
     return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
       setTimerRunning(false);
+      void stopBackgroundKeepAlive();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- Zustand actions are stable refs, runs once on mount
   }, []);
 
   // Track transcript lines
@@ -78,7 +74,6 @@ export default function ActiveWorkoutScreen() {
   useEffect(() => {
     if (lastCoachMessage) {
       setTranscriptLines((prev) => {
-        // Update last coach line if exists, otherwise add new
         const last = prev[prev.length - 1];
         if (last?.role === 'coach') {
           return [...prev.slice(0, -1), { ...last, text: lastCoachMessage }];
@@ -107,7 +102,11 @@ export default function ActiveWorkoutScreen() {
       </View>
 
       <View style={styles.timerContainer}>
-        <Text style={styles.timer}>{formatTime(elapsedSeconds)}</Text>
+        <Text style={styles.timer}>
+          {String(Math.floor(elapsedSeconds / 60)).padStart(2, '0')}
+          :
+          {String(elapsedSeconds % 60).padStart(2, '0')}
+        </Text>
         <Text style={styles.timerLabel}>ELAPSED</Text>
       </View>
 
@@ -184,7 +183,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: spacing.xl,
   },
+  timerRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+  },
   timer: {
+    ...typography.timer,
+    color: colors.textPrimary,
+    minWidth: 60,
+    textAlign: 'center',
+  },
+  timerColon: {
     ...typography.timer,
     color: colors.textPrimary,
   },

@@ -2,7 +2,6 @@ import { Platform } from 'react-native';
 import type { IHealthService } from './IHealthService';
 import type {
   MetricType,
-  HealthMetric,
   HealthPermissionResult,
   HealthCapabilities,
   BiometricSnapshot,
@@ -62,7 +61,6 @@ export function createHealthAdapter(): IHealthService {
   if (Platform.OS === 'ios') {
     try {
       // Dynamic import of the iOS-specific adapter
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const { HealthKitAdapter } = require('./HealthKitAdapter.ios');
       return new HealthKitAdapter();
     } catch {
@@ -70,6 +68,15 @@ export function createHealthAdapter(): IHealthService {
     }
   }
 
-  // Android and other platforms get the stub for now
+  if (Platform.OS === 'android') {
+    try {
+      // Dynamic import of the Android-specific adapter
+      const { HealthConnectAdapter } = require('./HealthConnectAdapter.android');
+      return new HealthConnectAdapter();
+    } catch {
+      return new StubHealthAdapter();
+    }
+  }
+
   return new StubHealthAdapter();
 }

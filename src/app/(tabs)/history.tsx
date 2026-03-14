@@ -1,10 +1,11 @@
 import { useState, useCallback, useEffect } from 'react';
 import { View, Text, FlatList, StyleSheet, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
 import { colors } from '@/theme/colors';
 import { spacing } from '@/theme/spacing';
 import { typography } from '@/theme/typography';
-import { supabase } from '@/services/supabase/client';
+import { api } from '@/services/api/client';
 import { useAuthContext } from '@/features/auth/context/AuthContext';
 import { WorkoutHistoryRow } from '@/features/history/components/WorkoutHistoryRow';
 import type { Tables } from '@/types/database';
@@ -12,6 +13,8 @@ import type { Tables } from '@/types/database';
 type WorkoutRow = Tables<'workouts'>;
 
 const PAGE_SIZE = 20;
+
+const keyExtractor = (item: WorkoutRow) => item.id;
 
 export default function HistoryScreen() {
   const { user } = useAuthContext();
@@ -24,19 +27,17 @@ export default function HistoryScreen() {
     async (offset = 0, refresh = false) => {
       if (!user) return;
 
-      const { data, error } = await supabase
-        .from('workouts')
-        .select('*')
-        .eq('user_id', user.id)
-        .eq('status', 'completed')
-        .order('started_at', { ascending: false })
-        .range(offset, offset + PAGE_SIZE - 1);
+      const { data: result, error } = await api.get<{ data: WorkoutRow[] }>(
+        `/api/workouts?status=completed&offset=${offset}&limit=${PAGE_SIZE}`,
+      );
 
       if (error) {
         console.error('Fetch workouts error:', error);
         setLoading(false);
         return;
       }
+
+      const data = result?.data ?? null;
 
       if (refresh) {
         setWorkouts(data ?? []);
@@ -65,9 +66,11 @@ export default function HistoryScreen() {
     void fetchWorkouts(workouts.length);
   }, [hasMore, loading, workouts.length, fetchWorkouts]);
 
-  const handleWorkoutPress = useCallback((_id: string) => {
-    // TODO: Navigate to workout detail screen
-  }, []);
+  const router = useRouter();
+
+  const handleWorkoutPress = useCallback((workoutId: string) => {
+    router.push(`/workout/detail/${workoutId}`);
+  }, [router]);
 
   const renderItem = useCallback(
     ({ item }: { item: WorkoutRow }) => (
@@ -115,12 +118,16 @@ export default function HistoryScreen() {
         <FlatList
           data={workouts}
           renderItem={renderItem}
-          keyExtractor={(item) => item.id}
+          keyExtractor={keyExtractor}
           contentContainerStyle={styles.list}
           onRefresh={handleRefresh}
           refreshing={refreshing}
           onEndReached={handleEndReached}
           onEndReachedThreshold={0.5}
+          windowSize={7}
+          maxToRenderPerBatch={10}
+          removeClippedSubviews
+          initialNumToRender={10}
         />
       )}
     </SafeAreaView>

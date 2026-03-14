@@ -1,5 +1,6 @@
-// Generated from supabase/migrations/*.sql
-// Re-generate with: npx supabase gen types typescript --local > src/types/database.ts
+// Generated from server/prisma/schema.prisma
+// These types mirror the Prisma-generated types but are kept for client-side compatibility.
+// Re-generate with: npx prisma generate (in server/) then copy relevant types.
 
 export type Json =
   | string

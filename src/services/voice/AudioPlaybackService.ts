@@ -7,6 +7,7 @@ export class AudioPlaybackService {
   private isPlaying = false;
   private onSpeakingChange: ((speaking: boolean) => void) | null = null;
   private fileCounter = 0;
+  private consecutiveErrors = 0;
 
   async initialize(): Promise<void> {
     await Audio.setAudioModeAsync({
@@ -47,6 +48,7 @@ export class AudioPlaybackService {
 
     this.isPlaying = true;
     this.onSpeakingChange?.(true);
+    this.consecutiveErrors = 0;
 
     try {
       // Write base64 audio to a temp file using new expo-file-system API
@@ -65,11 +67,20 @@ export class AudioPlaybackService {
           void this.onPlaybackFinished(sound, file);
         }
       });
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('Playback error:', error);
+      this.consecutiveErrors++;
+      if (this.consecutiveErrors >= 3) {
+        // Bail out to prevent infinite recursion on persistent failures
+        this.isPlaying = false;
+        this.audioQueue = [];
+        this.onSpeakingChange?.(false);
+        return;
+      }
       this.isPlaying = false;
       this.onSpeakingChange?.(false);
-      void this.playNext();
+      // Use setTimeout to break synchronous recursion
+      setTimeout(() => void this.playNext(), 0);
     }
   }
 

@@ -61,7 +61,7 @@ export const WorkoutHistoryRow = memo(function WorkoutHistoryRow({
   title,
   startedAt,
   durationSeconds,
-  totalVolume,
+  totalVolume: _totalVolume,
   totalCalories,
   onPress,
 }: WorkoutHistoryRowProps) {

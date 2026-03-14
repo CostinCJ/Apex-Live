@@ -1,4 +1,4 @@
-import { supabase } from '@/services/supabase/client';
+import { api } from '@/services/api/client';
 
 interface TranscriptEntry {
   role: 'user' | 'assistant';
@@ -15,39 +15,39 @@ export async function saveConversation(
   if (entries.length === 0) return null;
 
   // Create conversation record
-  const { data: conversation, error: convError } = await supabase
-    .from('coach_conversations')
-    .insert({
-      user_id: userId,
-      workout_id: workoutId,
+  const { data: convResult, error: convError } = await api.post<{ data: { id: string } }>(
+    '/api/conversations',
+    {
+      workoutId,
       title: `Coaching session ${new Date().toLocaleDateString()}`,
-      started_at: new Date(entries[0]?.timestamp ?? Date.now()).toISOString(),
-      ended_at: new Date(entries[entries.length - 1]?.timestamp ?? Date.now()).toISOString(),
-      message_count: entries.length,
-    })
-    .select('id')
-    .single();
+      startedAt: new Date(entries[0]?.timestamp ?? Date.now()).toISOString(),
+      endedAt: new Date(entries[entries.length - 1]?.timestamp ?? Date.now()).toISOString(),
+      messageCount: entries.length,
+    },
+  );
 
-  if (convError || !conversation) {
+  if (convError || !convResult?.data) {
     console.error('Failed to create conversation:', convError);
     return null;
   }
 
-  // Batch insert messages
-  const messages = entries.map((entry) => ({
-    conversation_id: conversation.id,
-    role: entry.role as 'user' | 'assistant',
-    content: entry.content,
-    audio_duration_ms: entry.audioDurationMs ?? null,
-  }));
+  const conversationId = convResult.data.id;
 
-  const { error: msgError } = await supabase
-    .from('coach_messages')
-    .insert(messages);
+  // Batch insert messages
+  const { error: msgError } = await api.post(
+    `/api/conversations/${conversationId}/messages`,
+    {
+      messages: entries.map((entry) => ({
+        role: entry.role,
+        content: entry.content,
+        audioDurationMs: entry.audioDurationMs ?? null,
+      })),
+    },
+  );
 
   if (msgError) {
     console.error('Failed to insert messages:', msgError);
   }
 
-  return conversation.id;
+  return conversationId;
 }

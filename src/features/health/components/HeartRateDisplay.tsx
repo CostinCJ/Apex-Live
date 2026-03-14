@@ -54,6 +54,7 @@ export const HeartRateDisplay = memo(function HeartRateDisplay({
     animation.start();
 
     return () => animation.stop();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- pulseAnim is a stable Animated.Value ref
   }, [bpm]);
 
   const color = zone ? zoneColors[zone] : colors.textTertiary;

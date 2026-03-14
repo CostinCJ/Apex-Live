@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { Alert } from 'react-native';
-import { supabase } from '@/services/supabase/client';
+import { api } from '@/services/api/client';
 import { useAuthContext } from '@/features/auth/context/AuthContext';
 
 export function useAccountDeletion() {
@@ -20,6 +20,7 @@ export function useAccountDeletion() {
         },
       ],
     );
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- performDeletion is defined in same scope and stable
   }, []);
 
   const performDeletion = async () => {
@@ -28,12 +29,7 @@ export function useAccountDeletion() {
     setDeleting(true);
 
     try {
-      // Call the export_user_data function first for a final backup opportunity
-      // Then delete all user data (cascade deletes handle related tables)
-      const { error: deleteError } = await supabase
-        .from('users')
-        .delete()
-        .eq('id', user.id);
+      const { error: deleteError } = await api.delete('/api/users/me');
 
       if (deleteError) {
         console.error('Account deletion error:', deleteError);
