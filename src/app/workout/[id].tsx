@@ -1,11 +1,11 @@
 import { useEffect, useState, useCallback } from 'react';
-import { View, Text, StyleSheet, Pressable, Alert, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, Pressable, Alert, ScrollView, BackHandler } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useKeepAwake } from 'expo-keep-awake';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '@/theme/colors';
-import { spacing, touchTarget, borderRadius } from '@/theme/spacing';
+import { spacing, borderRadius } from '@/theme/spacing';
 import { typography } from '@/theme/typography';
 import { useRealtimeStore } from '@/stores/realtimeStore';
 import { useWorkoutStore } from '@/stores/workoutStore';
@@ -18,6 +18,9 @@ import { VoiceControls } from '@/features/voice-coach/components/VoiceControls';
 import { TranscriptOverlay } from '@/features/voice-coach/components/TranscriptOverlay';
 import { SetTracker } from '@/features/workout/components/SetTracker';
 import { RestTimer } from '@/features/workout/components/RestTimer';
+import { WorkoutTimer } from '@/features/workout/components/WorkoutTimer';
+import { WorkoutBottomControls } from '@/features/workout/components/WorkoutBottomControls';
+import { ExerciseHeader } from '@/features/workout/components/ExerciseHeader';
 import { VoiceErrorBoundary } from '@/components/VoiceErrorBoundary';
 import { HealthErrorBoundary } from '@/components/HealthErrorBoundary';
 import { endWorkout, abandonWorkout, getMetricsSyncService } from '@/features/workout/services/workoutLifecycle';
@@ -74,6 +77,25 @@ export default function ActiveWorkoutScreen() {
   // Offline detection
   const { isOffline } = useOfflineWorkout();
   const units = useSettingsStore((s) => s.units);
+
+  // Prevent Android back button from navigating away without confirmation
+  useEffect(() => {
+    const handler = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (status === 'active' || status === 'paused') {
+        Alert.alert(
+          'Leave Workout?',
+          'Your workout progress will be saved. You can resume later.',
+          [
+            { text: 'Stay', style: 'cancel' },
+            { text: 'Leave', style: 'destructive', onPress: () => router.back() },
+          ],
+        );
+        return true; // prevent default back
+      }
+      return false;
+    });
+    return () => handler.remove();
+  }, [status, router]);
 
   // Animated timer
   const { start: startTimer, stop: stopTimer } = useAnimatedTimer();
@@ -151,10 +173,10 @@ export default function ActiveWorkoutScreen() {
   // Transcript tracking
   useEffect(() => {
     if (lastTranscript) {
-      setTranscriptLines((prev) => [
-        ...prev,
-        { text: lastTranscript, role: 'user', timestamp: Date.now() },
-      ]);
+      setTranscriptLines((prev) => {
+        const next = [...prev, { text: lastTranscript, role: 'user' as const, timestamp: Date.now() }];
+        return next.length > 100 ? next.slice(-100) : next;
+      });
     }
   }, [lastTranscript]);
 
@@ -165,10 +187,11 @@ export default function ActiveWorkoutScreen() {
         if (last?.role === 'coach') {
           return [...prev.slice(0, -1), { ...last, text: lastCoachMessage }];
         }
-        return [
+        const next = [
           ...prev,
-          { text: lastCoachMessage, role: 'coach', timestamp: Date.now() },
+          { text: lastCoachMessage, role: 'coach' as const, timestamp: Date.now() },
         ];
+        return next.length > 100 ? next.slice(-100) : next;
       });
     }
   }, [lastCoachMessage]);
@@ -264,10 +287,6 @@ export default function ActiveWorkoutScreen() {
     );
   }, [disconnect, resetRealtime, router]);
 
-  const exerciseCount = exercises.length;
-  const timerMinutes = String(Math.floor(elapsedSeconds / 60)).padStart(2, '0');
-  const timerSeconds = String(elapsedSeconds % 60).padStart(2, '0');
-
   // Show workout summary after completion
   if (showSummary && summaryData) {
     return (
@@ -294,80 +313,36 @@ export default function ActiveWorkoutScreen() {
       ) : null}
 
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
-        {/* Header with exercise name + navigation */}
-        <View style={styles.header}>
-          <View style={styles.exerciseNav}>
-            <Pressable
-              onPress={previousExercise}
-              disabled={currentExerciseIndex === 0}
-              style={[styles.navButton, currentExerciseIndex === 0 && styles.navButtonDisabled]}
-              accessibilityLabel="Previous exercise"
-            >
-              <Ionicons name="chevron-back" size={24} color={currentExerciseIndex === 0 ? colors.textTertiary : colors.textPrimary} />
-            </Pressable>
+        <ExerciseHeader
+          exerciseName={currentExercise?.exerciseName}
+          currentIndex={currentExerciseIndex}
+          totalExercises={exercises.length}
+          onPrevious={previousExercise}
+          onNext={nextExercise}
+        />
 
-            <View style={styles.exerciseInfo}>
-              <Text style={styles.exerciseName} numberOfLines={1}>
-                {currentExercise?.exerciseName ?? 'WORKOUT'}
-              </Text>
-              {exerciseCount > 0 ? (
-                <Text style={styles.exerciseProgress}>
-                  Exercise {currentExerciseIndex + 1} of {exerciseCount}
-                </Text>
-              ) : null}
-            </View>
-
-            <Pressable
-              onPress={nextExercise}
-              disabled={currentExerciseIndex >= exerciseCount - 1}
-              style={[styles.navButton, currentExerciseIndex >= exerciseCount - 1 && styles.navButtonDisabled]}
-              accessibilityLabel="Next exercise"
-            >
-              <Ionicons name="chevron-forward" size={24} color={currentExerciseIndex >= exerciseCount - 1 ? colors.textTertiary : colors.textPrimary} />
-            </Pressable>
-          </View>
-
-          {/* Exercise progress bar */}
-          {exerciseCount > 1 ? (
-            <View style={styles.progressBar}>
-              {exercises.map((_, i) => (
-                <View
-                  key={i}
-                  style={[
-                    styles.progressDot,
-                    i <= currentExerciseIndex && styles.progressDotActive,
-                    i === currentExerciseIndex && styles.progressDotCurrent,
-                  ]}
-                />
-              ))}
-            </View>
-          ) : null}
-        </View>
-
-        {/* Timer */}
-        <View style={styles.timerContainer}>
-          <View style={styles.timerRing}>
-            <Text style={styles.timer}>
-              {timerMinutes}:{timerSeconds}
-            </Text>
-          </View>
-          <Text style={styles.timerLabel}>
-            {status === 'paused' ? 'PAUSED' : 'ELAPSED'}
-          </Text>
-        </View>
+        <WorkoutTimer elapsedSeconds={elapsedSeconds} isPaused={status === 'paused'} />
 
         {/* Health metrics */}
         <HealthErrorBoundary>
           <View style={styles.metricsRow}>
-            <View style={[styles.metricCard, { borderLeftColor: colors.danger, borderLeftWidth: 3 }]}>
-              <Ionicons name="heart" size={16} color={colors.danger} style={styles.metricIcon} />
+            <View
+              style={[styles.metricCard, { borderLeftColor: colors.danger, borderLeftWidth: 3 }]}
+              accessibilityLabel={`Heart rate ${heartRate != null ? `${heartRate} beats per minute` : 'not available'}`}
+              accessibilityRole="text"
+            >
+              <Ionicons name="heart" size={16} color={colors.danger} style={styles.metricIcon} accessible={false} />
               <Text style={styles.metricValue}>
                 {heartRate != null ? heartRate : '--'}
               </Text>
               <Text style={styles.metricLabel}>BPM</Text>
             </View>
-            <View style={[styles.metricCard, { borderLeftColor: colors.warning, borderLeftWidth: 3 }]}>
-              <Ionicons name="flame" size={16} color={colors.warning} style={styles.metricIcon} />
+            <View
+              style={[styles.metricCard, { borderLeftColor: colors.warning, borderLeftWidth: 3 }]}
+              accessibilityLabel={`Calories burned ${caloriesBurned != null ? Math.round(caloriesBurned) : 0}`}
+              accessibilityRole="text"
+            >
+              <Ionicons name="flame" size={16} color={colors.warning} style={styles.metricIcon} accessible={false} />
               <Text style={styles.metricValue}>
                 {caloriesBurned != null ? Math.round(caloriesBurned) : '0'}
               </Text>
@@ -418,40 +393,12 @@ export default function ActiveWorkoutScreen() {
         </VoiceErrorBoundary>
       </ScrollView>
 
-      {/* Bottom controls */}
-      <View style={styles.controls}>
-        <Pressable
-          style={({ pressed }) => [styles.controlBtn, styles.pauseBtn, pressed && styles.btnPressed]}
-          onPress={handlePauseResume}
-          accessibilityRole="button"
-          accessibilityLabel={status === 'paused' ? 'Resume workout' : 'Pause workout'}
-        >
-          <Ionicons
-            name={status === 'paused' ? 'play' : 'pause'}
-            size={22}
-            color={colors.textPrimary}
-          />
-        </Pressable>
-
-        <Pressable
-          style={({ pressed }) => [styles.controlBtn, styles.endBtn, pressed && styles.btnPressed]}
-          onPress={handleEndWorkout}
-          accessibilityRole="button"
-          accessibilityLabel="End workout"
-        >
-          <Ionicons name="checkmark-circle" size={20} color={colors.white} />
-          <Text style={styles.endBtnText}>End Workout</Text>
-        </Pressable>
-
-        <Pressable
-          style={({ pressed }) => [styles.controlBtn, styles.abandonBtn, pressed && styles.btnPressed]}
-          onPress={handleAbandon}
-          accessibilityRole="button"
-          accessibilityLabel="Abandon workout"
-        >
-          <Ionicons name="close" size={22} color={colors.danger} />
-        </Pressable>
-      </View>
+      <WorkoutBottomControls
+        status={status}
+        onPauseResume={handlePauseResume}
+        onEnd={handleEndWorkout}
+        onAbandon={handleAbandon}
+      />
     </SafeAreaView>
   );
 }
@@ -467,92 +414,6 @@ const styles = StyleSheet.create({
   scrollContent: {
     padding: spacing.lg,
     paddingBottom: spacing.xl,
-  },
-
-  // Header / exercise nav
-  header: {
-    marginBottom: spacing.lg,
-  },
-  exerciseNav: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  navButton: {
-    width: 44,
-    height: 44,
-    borderRadius: borderRadius.full,
-    backgroundColor: colors.surface,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: colors.surfaceBorder,
-  },
-  navButtonDisabled: {
-    opacity: 0.3,
-  },
-  exerciseInfo: {
-    flex: 1,
-    alignItems: 'center',
-    paddingHorizontal: spacing.sm,
-  },
-  exerciseName: {
-    ...typography.heading,
-    color: colors.textPrimary,
-    textAlign: 'center',
-  },
-  exerciseProgress: {
-    ...typography.caption,
-    color: colors.textTertiary,
-    marginTop: 2,
-  },
-  progressBar: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 6,
-    marginTop: spacing.md,
-  },
-  progressDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: colors.border,
-  },
-  progressDotActive: {
-    backgroundColor: colors.primary + '60',
-  },
-  progressDotCurrent: {
-    backgroundColor: colors.primary,
-    width: 24,
-    borderRadius: 4,
-  },
-
-  // Timer
-  timerContainer: {
-    alignItems: 'center',
-    marginBottom: spacing.md,
-  },
-  timerRing: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    borderWidth: 3,
-    borderColor: colors.primary + '30',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.surface,
-  },
-  timer: {
-    ...typography.timer,
-    color: colors.textPrimary,
-    fontSize: 32,
-    lineHeight: 38,
-  },
-  timerLabel: {
-    ...typography.metricLabel,
-    color: colors.textTertiary,
-    marginTop: spacing.xs,
-    fontSize: 11,
   },
 
   // Metrics
@@ -594,48 +455,6 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xl,
   },
 
-  // Bottom controls
-  controls: {
-    flexDirection: 'row',
-    gap: spacing.md,
-    paddingHorizontal: spacing.lg,
-    paddingBottom: spacing.lg,
-    paddingTop: spacing.sm,
-    borderTopWidth: 1,
-    borderTopColor: colors.surfaceBorder,
-  },
-  controlBtn: {
-    minHeight: touchTarget.workout,
-    borderRadius: borderRadius.lg,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexDirection: 'row',
-    gap: spacing.sm,
-  },
-  pauseBtn: {
-    width: touchTarget.workout,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.surfaceBorder,
-  },
-  endBtn: {
-    flex: 1,
-    backgroundColor: colors.primary,
-    paddingHorizontal: spacing.lg,
-  },
-  endBtnText: {
-    ...typography.button,
-    color: colors.white,
-  },
-  abandonBtn: {
-    width: touchTarget.workout,
-    backgroundColor: colors.danger + '15',
-    borderWidth: 1,
-    borderColor: colors.danger + '30',
-  },
-  btnPressed: {
-    opacity: 0.8,
-  },
   offlineBadge: {
     flexDirection: 'row',
     alignItems: 'center',

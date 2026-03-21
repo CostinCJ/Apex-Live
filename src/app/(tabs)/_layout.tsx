@@ -37,8 +37,9 @@ export default function TabLayout() {
           title: 'Home',
           tabBarLabel: 'Home',
           tabBarIcon: ({ focused, color }) => (
-            <Ionicons name={focused ? 'home' : 'home-outline'} size={24} color={color} />
+            <Ionicons name={focused ? 'home' : 'home-outline'} size={24} color={color} accessibilityLabel="Home tab" />
           ),
+          tabBarAccessibilityLabel: 'Home tab',
         }}
         listeners={{ tabPress: handleTabPress }}
       />
@@ -48,8 +49,9 @@ export default function TabLayout() {
           title: 'History',
           tabBarLabel: 'History',
           tabBarIcon: ({ focused, color }) => (
-            <Ionicons name={focused ? 'time' : 'time-outline'} size={24} color={color} />
+            <Ionicons name={focused ? 'time' : 'time-outline'} size={24} color={color} accessibilityLabel="History tab" />
           ),
+          tabBarAccessibilityLabel: 'History tab',
         }}
         listeners={{ tabPress: handleTabPress }}
       />
@@ -59,8 +61,9 @@ export default function TabLayout() {
           title: 'Progress',
           tabBarLabel: 'Progress',
           tabBarIcon: ({ focused, color }) => (
-            <Ionicons name={focused ? 'bar-chart' : 'bar-chart-outline'} size={24} color={color} />
+            <Ionicons name={focused ? 'bar-chart' : 'bar-chart-outline'} size={24} color={color} accessibilityLabel="Progress tab" />
           ),
+          tabBarAccessibilityLabel: 'Progress tab',
         }}
         listeners={{ tabPress: handleTabPress }}
       />
@@ -70,8 +73,9 @@ export default function TabLayout() {
           title: 'Profile',
           tabBarLabel: 'Profile',
           tabBarIcon: ({ focused, color }) => (
-            <Ionicons name={focused ? 'person' : 'person-outline'} size={24} color={color} />
+            <Ionicons name={focused ? 'person' : 'person-outline'} size={24} color={color} accessibilityLabel="Profile tab" />
           ),
+          tabBarAccessibilityLabel: 'Profile tab',
         }}
         listeners={{ tabPress: handleTabPress }}
       />

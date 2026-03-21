@@ -1,5 +1,6 @@
-import { useState, useCallback } from 'react';
-import { View, Text, Pressable, StyleSheet } from 'react-native';
+import { useState, useCallback, useEffect } from 'react';
+import { View, Text, Pressable, StyleSheet, BackHandler } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
@@ -7,6 +8,7 @@ import { colors } from '@/theme/colors';
 import { spacing, touchTarget, borderRadius } from '@/theme/spacing';
 import { typography } from '@/theme/typography';
 import { useSettingsStore } from '@/stores/settingsStore';
+import { api } from '@/services/api/client';
 
 type Step = 'welcome' | 'fitness_level' | 'voice_prefs' | 'permissions' | 'ready';
 
@@ -21,6 +23,21 @@ export default function OnboardingScreen() {
   const setCoachStyle = useSettingsStore((s) => s.setCoachStyle);
   const setHasCompletedOnboarding = useSettingsStore((s) => s.setHasCompletedOnboarding);
 
+  const back = useCallback(() => {
+    if (stepIndex > 0) {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      setStepIndex(stepIndex - 1);
+      return true;
+    }
+    return false;
+  }, [stepIndex]);
+
+  // Handle Android hardware back button
+  useEffect(() => {
+    const handler = BackHandler.addEventListener('hardwareBackPress', back);
+    return () => handler.remove();
+  }, [back]);
+
   const next = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     if (stepIndex < STEPS.length - 1) {
@@ -31,6 +48,17 @@ export default function OnboardingScreen() {
   const finish = useCallback(() => {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     setHasCompletedOnboarding(true);
+
+    // Sync preferences to server (fire-and-forget)
+    const settings = useSettingsStore.getState();
+    void api.patch('/api/users/me', {
+      fitnessLevel: settings.fitnessLevel ?? 'intermediate',
+      voiceSettings: {
+        coaching_style: settings.coachStyle,
+        verbosity: settings.coachVerbosity,
+      },
+    });
+
     router.replace('/(tabs)');
   }, [router, setHasCompletedOnboarding]);
 
@@ -52,14 +80,32 @@ export default function OnboardingScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Progress dots */}
-      <View style={styles.progress}>
-        {STEPS.map((_, i) => (
-          <View
-            key={i}
-            style={[styles.dot, i <= stepIndex && styles.dotActive]}
-          />
-        ))}
+      {/* Back button + Progress dots */}
+      <View style={styles.header}>
+        {stepIndex > 0 ? (
+          <Pressable
+            style={styles.backButton}
+            onPress={back}
+            accessibilityRole="button"
+            accessibilityLabel="Go back"
+          >
+            <Ionicons name="chevron-back" size={24} color={colors.textSecondary} />
+          </Pressable>
+        ) : (
+          <View style={styles.backButtonPlaceholder} />
+        )}
+        <View
+          style={styles.progress}
+          accessibilityLabel={`Step ${stepIndex + 1} of ${STEPS.length}`}
+        >
+          {STEPS.map((_, i) => (
+            <View
+              key={i}
+              style={[styles.dot, i <= stepIndex && styles.dotActive]}
+            />
+          ))}
+        </View>
+        <View style={styles.backButtonPlaceholder} />
       </View>
 
       {step === 'welcome' ? (
@@ -166,11 +212,26 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
   },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.lg,
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  backButtonPlaceholder: {
+    width: 40,
+  },
   progress: {
+    flex: 1,
     flexDirection: 'row',
     justifyContent: 'center',
     gap: spacing.sm,
-    paddingVertical: spacing.lg,
   },
   dot: {
     width: 8,

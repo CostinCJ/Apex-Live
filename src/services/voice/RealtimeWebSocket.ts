@@ -59,6 +59,8 @@ export class RealtimeWebSocket {
   disconnect(): void {
     this.intentionalClose = true;
     this.cleanup();
+    this.eventHandlers.clear();
+    this.stateHandlers.clear();
     this.setState('disconnected');
   }
 

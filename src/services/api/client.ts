@@ -246,4 +246,24 @@ export const auth = {
     const token = await getAccessToken();
     return token !== null;
   },
+
+  verifyEmail: async (code: string): Promise<ApiResponse<{ success: boolean }>> => {
+    return api.post<{ success: boolean }>('/api/auth/verify-email', { code });
+  },
+
+  resendVerification: async (): Promise<ApiResponse<{ success: boolean }>> => {
+    return api.post<{ success: boolean }>('/api/auth/resend-verification');
+  },
+
+  forgotPassword: async (email: string): Promise<ApiResponse<{ success: boolean }>> => {
+    return api.post<{ success: boolean }>('/api/auth/forgot-password', { email });
+  },
+
+  resetPassword: async (email: string, code: string, newPassword: string): Promise<ApiResponse<{ success: boolean }>> => {
+    return api.post<{ success: boolean }>('/api/auth/reset-password', { email, code, newPassword });
+  },
+
+  changePassword: async (currentPassword: string, newPassword: string): Promise<ApiResponse<{ success: boolean }>> => {
+    return api.post<{ success: boolean }>('/api/auth/change-password', { currentPassword, newPassword });
+  },
 };

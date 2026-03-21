@@ -1,5 +1,5 @@
 /** Health data polling interval during active workout (ms) */
-export const HEALTH_POLL_INTERVAL_ACTIVE = 5000;
+export const HEALTH_POLL_INTERVAL_ACTIVE = 15000;
 
 /** Health data polling interval during rest (ms) — dev plan specifies 30s */
 export const HEALTH_POLL_INTERVAL_REST = 30000;

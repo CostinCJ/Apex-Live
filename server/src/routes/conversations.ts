@@ -2,7 +2,7 @@ import { Router, type Request, type Response } from 'express';
 import { z } from 'zod';
 import { prisma } from '../config/database.js';
 import { requireAuth, getUserId } from '../middleware/auth.js';
-import { param } from '../middleware/params.js';
+import { uuidParam } from '../middleware/params.js';
 
 export const conversationsRouter = Router();
 conversationsRouter.use(requireAuth);
@@ -56,8 +56,10 @@ conversationsRouter.post('/:id/messages', async (req: Request, res: Response) =>
     return;
   }
 
+  const conversationId = uuidParam(req, res, 'id');
+  if (!conversationId) return;
+
   const userId = getUserId(req);
-  const conversationId = param(req, 'id');
 
   // Verify ownership
   const conversation = await prisma.coachConversation.findFirst({
@@ -90,10 +92,14 @@ conversationsRouter.post('/:id/messages', async (req: Request, res: Response) =>
 // ─── List conversations ─────────────────────────────────────────────
 
 conversationsRouter.get('/', async (req: Request, res: Response) => {
+  const offset = Number(req.query.offset) || 0;
+  const limit = Math.min(Number(req.query.limit) || 50, 100);
+
   const data = await prisma.coachConversation.findMany({
     where: { userId: getUserId(req) },
     orderBy: { startedAt: 'desc' },
-    take: 50,
+    skip: offset,
+    take: limit,
   });
 
   res.json({ data });
@@ -102,8 +108,11 @@ conversationsRouter.get('/', async (req: Request, res: Response) => {
 // ─── Get conversation with messages ─────────────────────────────────
 
 conversationsRouter.get('/:id', async (req: Request, res: Response) => {
+  const id = uuidParam(req, res, 'id');
+  if (!id) return;
+
   const conversation = await prisma.coachConversation.findFirst({
-    where: { id: param(req, 'id'), userId: getUserId(req) },
+    where: { id, userId: getUserId(req) },
     include: {
       messages: { orderBy: { createdAt: 'asc' } },
     },

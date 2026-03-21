@@ -13,12 +13,20 @@ progressRouter.get('/summaries', async (req: Request, res: Response) => {
 
   const where: Record<string, unknown> = { userId };
   if (since) {
-    where.date = { gte: new Date(since) };
+    const sinceDate = new Date(since);
+    if (isNaN(sinceDate.getTime())) {
+      res.status(400).json({ error: 'Invalid date format for "since" parameter' });
+      return;
+    }
+    where.date = { gte: sinceDate };
   }
+
+  const limit = Math.min(Number(req.query.limit) || 365, 1000);
 
   const data = await prisma.dailyWorkoutSummary.findMany({
     where,
     orderBy: { date: 'desc' },
+    take: limit,
   });
 
   res.json({ data });
@@ -41,6 +49,17 @@ progressRouter.get('/records', async (req: Request, res: Response) => {
 
 // ─── Get previous workout (for comparison) ──────────────────────────
 
+const VALID_WORKOUT_TYPES = [
+  'push', 'pull', 'legs', 'upper', 'lower', 'full_body',
+  'hiit', 'cardio_run', 'cardio_cycle', 'cardio_row',
+  'boxing', 'mobility', 'custom',
+];
+
+const VALID_METRIC_TYPES = [
+  'heart_rate', 'calories', 'distance', 'pace', 'speed',
+  'cadence', 'power', 'elevation', 'rep_count', 'weight', 'rpe',
+];
+
 progressRouter.get('/previous-workout', async (req: Request, res: Response) => {
   const userId = getUserId(req);
   const workoutType = req.query.workoutType as string;
@@ -48,6 +67,11 @@ progressRouter.get('/previous-workout', async (req: Request, res: Response) => {
 
   if (!workoutType) {
     res.status(400).json({ error: 'workoutType is required' });
+    return;
+  }
+
+  if (!VALID_WORKOUT_TYPES.includes(workoutType)) {
+    res.status(400).json({ error: `Invalid workoutType. Allowed: ${VALID_WORKOUT_TYPES.join(', ')}` });
     return;
   }
 
@@ -85,6 +109,11 @@ progressRouter.get('/compare', async (req: Request, res: Response) => {
 
   if (!currentId || !previousId || !metric) {
     res.status(400).json({ error: 'currentId, previousId, and metric are required' });
+    return;
+  }
+
+  if (!VALID_METRIC_TYPES.includes(metric)) {
+    res.status(400).json({ error: `Invalid metric. Allowed: ${VALID_METRIC_TYPES.join(', ')}` });
     return;
   }
 

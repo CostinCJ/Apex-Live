@@ -43,6 +43,11 @@ aiProxyRouter.post('/session', async (req: Request, res: Response) => {
     return;
   }
 
+  if (!env.OPENAI_API_KEY) {
+    res.status(503).json({ error: 'Voice coaching is not configured' });
+    return;
+  }
+
   const ALLOWED_MODELS = ['gpt-4o-realtime-preview', 'gpt-4o-realtime-preview-2024-12-17', 'gpt-4o-mini-realtime-preview-2024-12-17'];
   const ALLOWED_VOICES = ['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'];
 

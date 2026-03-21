@@ -21,7 +21,7 @@ export function useOfflineWorkout() {
       const timeout = setTimeout(() => controller.abort(), 5000);
 
       const res = await fetch(
-        `${process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:3001'}/api/auth/session`,
+        `${process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:3001'}/health`,
         {
           method: 'HEAD',
           signal: controller.signal,

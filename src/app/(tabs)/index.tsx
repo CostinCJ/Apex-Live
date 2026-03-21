@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, Pressable, ScrollView, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { colors } from '@/theme/colors';
@@ -11,6 +11,8 @@ import { WORKOUT_TYPE_META } from '@/data/workoutTypes';
 import { getQuickStartPlan } from '@/data/defaultExercises';
 import { createAndStartWorkout } from '@/features/workout/services/workoutLifecycle';
 import { useCrashRecovery } from '@/features/workout/hooks/useCrashRecovery';
+import { api } from '@/services/api/client';
+import { useAuthContext } from '@/features/auth/context/AuthContext';
 import type { WorkoutType } from '@/types/workout';
 
 const quickStartWorkouts: { type: WorkoutType; label: string }[] = [
@@ -41,9 +43,35 @@ function WorkoutIcon({ type, size = 28 }: { type: WorkoutType; size?: number }) 
 
 export default function HomeScreen() {
   const router = useRouter();
+  const { user } = useAuthContext();
   const [loading, setLoading] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [todaySummary, setTodaySummary] = useState<{ count: number; duration: number; calories: number } | null>(null);
   const { hasRecovery, recoveryInfo, resumeWorkout, discardWorkout } = useCrashRecovery();
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!user) return;
+      const today = new Date().toISOString().split('T')[0];
+      api.get<{ data: Array<{ workoutCount: number; totalDuration: number; totalCalories: number }> }>(
+        `/api/progress/summaries?since=${today}&limit=1`,
+      ).then(({ data }) => {
+        if (!data?.data?.length) {
+          setTodaySummary({ count: 0, duration: 0, calories: 0 });
+          return;
+        }
+        const summary = data.data[0];
+        if (!summary) return;
+        setTodaySummary({
+          count: summary.workoutCount,
+          duration: summary.totalDuration,
+          calories: Number(summary.totalCalories),
+        });
+      }).catch(() => {
+        // Silently handle — todaySummary stays null
+      });
+    }, [user]),
+  );
 
   const handleQuickStart = useCallback(async (type: WorkoutType) => {
     if (loading) return;
@@ -142,7 +170,30 @@ export default function HomeScreen() {
             <Ionicons name="today-outline" size={20} color={colors.textSecondary} />
             <Text style={styles.sectionTitle}>Today</Text>
           </View>
-          <Text style={styles.emptyText}>No workouts yet today</Text>
+          {todaySummary && todaySummary.count > 0 ? (
+            <View style={styles.todayStats}>
+              <View style={styles.todayStat}>
+                <Text style={styles.todayStatValue}>{todaySummary.count}</Text>
+                <Text style={styles.todayStatLabel}>Workouts</Text>
+              </View>
+              <View style={styles.todayStat}>
+                <Text style={styles.todayStatValue}>
+                  {todaySummary.duration >= 3600
+                    ? `${Math.floor(todaySummary.duration / 3600)}h ${Math.floor((todaySummary.duration % 3600) / 60)}m`
+                    : `${Math.floor(todaySummary.duration / 60)}m`}
+                </Text>
+                <Text style={styles.todayStatLabel}>Duration</Text>
+              </View>
+              <View style={styles.todayStat}>
+                <Text style={styles.todayStatValue}>
+                  {todaySummary.calories > 0 ? Math.round(todaySummary.calories).toLocaleString() : '0'}
+                </Text>
+                <Text style={styles.todayStatLabel}>Calories</Text>
+              </View>
+            </View>
+          ) : (
+            <Text style={styles.emptyText}>No workouts yet today</Text>
+          )}
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -243,6 +294,23 @@ const styles = StyleSheet.create({
   emptyText: {
     ...typography.body,
     color: colors.textTertiary,
+  },
+  todayStats: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+  },
+  todayStat: {
+    alignItems: 'center',
+  },
+  todayStatValue: {
+    ...typography.metricMedium,
+    color: colors.textPrimary,
+    fontSize: 22,
+  },
+  todayStatLabel: {
+    ...typography.metricLabel,
+    color: colors.textTertiary,
+    marginTop: spacing.xs,
   },
   recoveryBanner: {
     backgroundColor: colors.warning + '15',

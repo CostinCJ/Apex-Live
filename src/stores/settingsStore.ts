@@ -75,6 +75,15 @@ export const useSettingsStore = create<SettingsState & SettingsActions>()(
     {
       name: 'apex-settings',
       storage: createJSONStorage(() => AsyncStorage),
+      version: 1,
+      migrate: (persisted, version) => {
+        const state = persisted as SettingsState & SettingsActions;
+        if (version === 0) {
+          // v1: default units changed from imperial to metric
+          state.units = 'metric';
+        }
+        return state;
+      },
     },
   ),
 );

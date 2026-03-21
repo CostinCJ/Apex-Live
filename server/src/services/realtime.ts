@@ -45,7 +45,10 @@ export class RealtimeService {
 
         ws.on('pong', () => { ws.isAlive = true; });
         ws.on('close', () => this.removeSocket(ws));
-        ws.on('error', () => this.removeSocket(ws));
+        ws.on('error', (err) => {
+          console.error(`WebSocket error for user ${ws.userId}:`, err);
+          this.removeSocket(ws);
+        });
 
         ws.send(JSON.stringify({ type: 'connected', userId: payload.sub }));
       } catch {

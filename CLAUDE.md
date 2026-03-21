@@ -24,10 +24,10 @@ npm run typecheck                 # TypeScript (client)
 cd server && npm run typecheck    # TypeScript (server, separate tsconfig)
 
 # Database
-cd server && npx prisma generate          # Regenerate client after schema change
-cd server && npx prisma migrate dev --name <name>  # Create migration
-cd server && npx prisma db push           # Push schema without migration
-cd server && npx prisma studio            # GUI on :5555
+cd server && npm run db:generate          # Regenerate client after schema change
+cd server && npm run db:migrate           # Create migration
+cd server && npm run db:push              # Push schema without migration
+cd server && npm run db:studio            # GUI on :5555
 
 # Builds
 eas build --profile development --platform android
@@ -57,7 +57,7 @@ Each has its own `tsconfig.json`. ESLint only covers `src/` (server is excluded)
 
 - **Routes:** `routes/{auth,workouts,metrics,conversations,progress,users,aiProxy}.ts` — all under `/api/`
 - **Auth:** JWT access + refresh tokens, bcrypt (SALT_ROUNDS=12), refresh tokens stored as SHA256 hash. Token rotation on refresh.
-- **Middleware:** `middleware/{auth,params,errorHandler}.ts` — `requireAuth` guard extracts user from JWT
+- **Middleware:** `middleware/{auth,params,errorHandler,rateLimit}.ts` — `requireAuth` guard extracts user from JWT, rate limiting on auth endpoints
 - **Database:** PostgreSQL + Prisma ORM, singleton client in `config/database.ts`. 9 tables (see `server/prisma/schema.prisma`)
 - **Validation:** Zod schemas on all routes
 - **WebSocket:** `ws` library for realtime sync and OpenAI voice proxy
@@ -68,7 +68,9 @@ Each has its own `tsconfig.json`. ESLint only covers `src/` (server is excluded)
 - **Downsampled metrics:** `workout_metrics_downsampled` table stores 1-min aggregated buckets for historical data
 - **Token refresh dedup:** Client uses a `refreshPromise` lock to prevent thundering herd on concurrent 401s
 - **Crash recovery:** Active workout state persists to MMKV via Zustand persist middleware
-- **Supabase removed:** Legacy `supabase/` directory exists but is unused — all data flows through Express/Prisma
+- **Graceful shutdown:** Server handles SIGTERM/SIGINT, closes WebSocket and Prisma connections
+- **Health check:** `GET /health` pings PostgreSQL; returns 503 if database is down
+- **Containerized:** `server/Dockerfile` provides multi-stage build for production deployment
 
 ## Code Style
 

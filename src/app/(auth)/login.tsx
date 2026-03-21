@@ -14,6 +14,7 @@ export default function LoginScreen() {
       onSubmit={signIn}
       onSwitchMode={() => router.replace('/(auth)/register')}
       onClearError={clearError}
+      onForgotPassword={() => router.push('/(auth)/forgot-password')}
     />
   );
 }

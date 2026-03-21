@@ -66,6 +66,7 @@ model User {
   id            String    @id @default(uuid()) @db.Uuid
   email         String    @unique
   passwordHash  String    @map("password_hash")
+  emailVerified Boolean   @default(false) @map("email_verified")
   displayName   String?   @map("display_name")
   avatarUrl     String?   @map("avatar_url")
   dateOfBirth   DateTime? @map("date_of_birth") @db.Date
@@ -73,22 +74,28 @@ model User {
   heightCm      Decimal?  @map("height_cm") @db.Decimal(5, 1)
   weightKg      Decimal?  @map("weight_kg") @db.Decimal(5, 1)
   fitnessLevel  String    @default("intermediate") @map("fitness_level")
-  preferences   Json      @default("{\"units\": \"imperial\", \"weekly_goal_days\": 4, \"preferred_workout_types\": [], \"rest_day_reminders\": true}")
+  preferences   Json      @default("{\"units\": \"metric\", \"weekly_goal_days\": 4, \"preferred_workout_types\": [], \"rest_day_reminders\": true}")
   voiceSettings Json      @default("{\"voice_id\": \"default\", \"speed\": 1.0, \"coaching_style\": \"motivational\", \"verbosity\": \"moderate\", \"language\": \"en-US\"}") @map("voice_settings")
   timezone      String    @default("UTC")
-  units         String    @default("imperial")
+  units         String    @default("metric")
   createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz()
   updatedAt     DateTime  @updatedAt @map("updated_at") @db.Timestamptz()
 
   // Auth
-  refreshTokens RefreshToken[]
+  refreshTokens      RefreshToken[]
+  emailVerifyTokens  EmailVerifyToken[]
+  passwordResetTokens PasswordResetToken[]
+
+  // Billing
+  subscription Subscription?
 
   // Relations
-  workouts           Workout[]
-  workoutMetrics     WorkoutMetric[]
-  personalRecords    PersonalRecord[]
-  coachConversations CoachConversation[]
-  dailySummaries     DailyWorkoutSummary[]
+  workouts              Workout[]
+  workoutMetrics        WorkoutMetric[]
+  downsampledMetrics    WorkoutMetricDownsampled[]
+  personalRecords       PersonalRecord[]
+  coachConversations    CoachConversation[]
+  dailySummaries        DailyWorkoutSummary[]
 
   @@map("users")
 }
@@ -107,6 +114,80 @@ model RefreshToken {
   @@index([userId])
   @@index([expiresAt])
   @@map("refresh_tokens")
+}
+
+// ─── Email Verification Tokens ──────────────────────────────────────
+
+model EmailVerifyToken {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  token     String   @unique
+  expiresAt DateTime @map("expires_at") @db.Timestamptz()
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("email_verify_tokens")
+}
+
+// ─── Password Reset Tokens ──────────────────────────────────────────
+
+model PasswordResetToken {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  token     String   @unique
+  expiresAt DateTime @map("expires_at") @db.Timestamptz()
+  usedAt    DateTime? @map("used_at") @db.Timestamptz()
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("password_reset_tokens")
+}
+
+// ─── Subscriptions ──────────────────────────────────────────────────
+
+enum SubscriptionStatus {
+  active
+  past_due
+  canceled
+  expired
+  trialing
+
+  @@map("subscription_status")
+}
+
+enum SubscriptionPlan {
+  free
+  monthly
+  yearly
+
+  @@map("subscription_plan")
+}
+
+model Subscription {
+  id                   String             @id @default(uuid()) @db.Uuid
+  userId               String             @unique @map("user_id") @db.Uuid
+  plan                 SubscriptionPlan   @default(free)
+  status               SubscriptionStatus @default(active)
+  provider             String             @default("revenueCat")
+  providerSubscriptionId String?          @map("provider_subscription_id")
+  currentPeriodStart   DateTime?          @map("current_period_start") @db.Timestamptz()
+  currentPeriodEnd     DateTime?          @map("current_period_end") @db.Timestamptz()
+  cancelAtPeriodEnd    Boolean            @default(false) @map("cancel_at_period_end")
+  trialEnd             DateTime?          @map("trial_end") @db.Timestamptz()
+  createdAt            DateTime           @default(now()) @map("created_at") @db.Timestamptz()
+  updatedAt            DateTime           @updatedAt @map("updated_at") @db.Timestamptz()
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([status])
+  @@index([currentPeriodEnd])
+  @@map("subscriptions")
 }
 
 // ─── Workouts ───────────────────────────────────────────────────────
@@ -128,9 +209,10 @@ model Workout {
   createdAt       DateTime      @default(now()) @map("created_at") @db.Timestamptz()
   updatedAt       DateTime      @updatedAt @map("updated_at") @db.Timestamptz()
 
-  user             User               @relation(fields: [userId], references: [id], onDelete: Cascade)
-  workoutMetrics   WorkoutMetric[]
-  personalRecords  PersonalRecord[]
+  user               User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workoutMetrics     WorkoutMetric[]
+  downsampledMetrics WorkoutMetricDownsampled[]
+  personalRecords    PersonalRecord[]
   coachConversations CoachConversation[]
 
   @@index([userId, workoutType, startedAt(sort: Desc)], map: "idx_workouts_user_type_started")
@@ -155,24 +237,32 @@ model WorkoutMetric {
   user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([workoutId, recordedAt], map: "idx_wm_workout_recorded")
+  @@index([workoutId, metricType, recordedAt(sort: Desc)], map: "idx_wm_workout_type_recorded")
   @@index([userId, metricType, recordedAt(sort: Desc)], map: "idx_wm_user_type_recorded")
+  @@index([userId], map: "idx_wm_user_id")
   @@map("workout_metrics")
 }
 
 // ─── Downsampled Metrics (1-min buckets for old data) ───────────────
 
 model WorkoutMetricDownsampled {
-  workoutId   String     @map("workout_id") @db.Uuid
-  userId      String     @map("user_id") @db.Uuid
-  metricType  MetricType @map("metric_type")
-  bucketStart DateTime   @map("bucket_start") @db.Timestamptz()
-  bucketSeconds Int      @default(60) @map("bucket_seconds")
-  avgValue    Decimal    @map("avg_value") @db.Decimal(10, 2)
-  minValue    Decimal    @map("min_value") @db.Decimal(10, 2)
-  maxValue    Decimal    @map("max_value") @db.Decimal(10, 2)
-  sampleCount Int        @default(1) @map("sample_count")
+  workoutId     String     @map("workout_id") @db.Uuid
+  userId        String     @map("user_id") @db.Uuid
+  metricType    MetricType @map("metric_type")
+  bucketStart   DateTime   @map("bucket_start") @db.Timestamptz()
+  bucketSeconds Int        @default(60) @map("bucket_seconds")
+  avgValue      Decimal    @map("avg_value") @db.Decimal(10, 2)
+  minValue      Decimal    @map("min_value") @db.Decimal(10, 2)
+  maxValue      Decimal    @map("max_value") @db.Decimal(10, 2)
+  sampleCount   Int        @default(1) @map("sample_count")
+
+  workout Workout @relation(fields: [workoutId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@id([workoutId, metricType, bucketStart])
+  @@index([userId], map: "idx_downsampled_user_id")
+  @@index([workoutId], map: "idx_downsampled_workout_id")
+  @@index([userId, metricType, bucketStart(sort: Desc)], map: "idx_downsampled_user_type_bucket")
   @@map("workout_metrics_downsampled")
 }
 

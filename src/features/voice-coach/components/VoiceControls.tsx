@@ -1,6 +1,7 @@
 import { memo } from 'react';
-import { View, Pressable, Text, StyleSheet } from 'react-native';
+import { View, Pressable, Text, StyleSheet, ActivityIndicator } from 'react-native';
 import * as Haptics from 'expo-haptics';
+import { Ionicons } from '@expo/vector-icons';
 import { colors } from '@/theme/colors';
 import { spacing, touchTarget, borderRadius } from '@/theme/spacing';
 import { typography } from '@/theme/typography';
@@ -55,7 +56,12 @@ export const VoiceControls = memo(function VoiceControls({
             accessibilityLabel={isListening ? 'Mute microphone' : 'Unmute microphone'}
             accessibilityState={{ selected: isListening }}
           >
-            <Text style={styles.micIcon}>{isListening ? '🎙️' : '🔇'}</Text>
+            <Ionicons
+              name={isListening ? 'mic' : 'mic-off'}
+              size={24}
+              color={isListening ? colors.primary : colors.textTertiary}
+              accessible={false}
+            />
             <Text style={[styles.micLabel, isListening && styles.micLabelActive]}>
               {isListening ? 'Listening' : 'Muted'}
             </Text>
@@ -101,6 +107,13 @@ export const VoiceControls = memo(function VoiceControls({
                 ? 'Coach is speaking'
                 : 'Ready'}
         </Text>
+      ) : connectionState === 'reconnecting' ? (
+        <View style={styles.reconnectingRow}>
+          <ActivityIndicator size="small" color={colors.warning} />
+          <Text style={[styles.statusText, { color: colors.warning }]}>Reconnecting...</Text>
+        </View>
+      ) : connectionState === 'error' ? (
+        <Text style={[styles.statusText, { color: colors.error }]}>Connection lost. Tap to retry.</Text>
       ) : null}
     </View>
   );
@@ -133,9 +146,6 @@ const styles = StyleSheet.create({
   buttonPressed: {
     opacity: 0.7,
     transform: [{ scale: 0.95 }],
-  },
-  micIcon: {
-    fontSize: 24,
   },
   micLabel: {
     ...typography.caption,
@@ -180,6 +190,12 @@ const styles = StyleSheet.create({
   statusText: {
     ...typography.caption,
     color: colors.textSecondary,
+    marginTop: spacing.md,
+  },
+  reconnectingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
     marginTop: spacing.md,
   },
 });

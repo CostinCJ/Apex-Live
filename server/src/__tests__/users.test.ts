@@ -135,4 +135,75 @@ describe('Users API', () => {
       expect([401, 404]).toContain(check.status);
     });
   });
+
+  describe('GET /api/users/me/export (GDPR)', () => {
+    it('returns 401 without auth', async () => {
+      const res = await fetch(`${API}/api/users/me/export`);
+      expect(res.status).toBe(401);
+    });
+
+    it('returns user data without passwordHash', async () => {
+      const res = await fetch(`${API}/api/users/me/export`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as {
+        data: {
+          user: Record<string, unknown>;
+          workouts: unknown[];
+          personal_records: unknown[];
+          daily_summaries: unknown[];
+        };
+      };
+
+      // user object must exist and not contain passwordHash
+      expect(body.data.user).toBeDefined();
+      expect(body.data.user.id).toBe(userId);
+      expect(body.data.user.email).toBeDefined();
+      expect(body.data.user).not.toHaveProperty('passwordHash');
+    });
+
+    it('returns data structure with user, workouts, personal_records, daily_summaries keys', async () => {
+      const res = await fetch(`${API}/api/users/me/export`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as { data: Record<string, unknown> };
+
+      expect(body.data).toHaveProperty('user');
+      expect(body.data).toHaveProperty('workouts');
+      expect(body.data).toHaveProperty('personal_records');
+      expect(body.data).toHaveProperty('daily_summaries');
+
+      // All collections should be arrays
+      expect(Array.isArray(body.data.workouts)).toBe(true);
+      expect(Array.isArray(body.data.personal_records)).toBe(true);
+      expect(Array.isArray(body.data.daily_summaries)).toBe(true);
+    });
+
+    it('includes workouts created by the user', async () => {
+      // Create a workout for this user so we can verify export includes it
+      const createRes = await fetch(`${API}/api/workouts`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ workoutType: 'push', title: 'Export Test Workout' }),
+      });
+      expect(createRes.status).toBe(201);
+
+      const exportRes = await fetch(`${API}/api/users/me/export`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      expect(exportRes.status).toBe(200);
+      const body = (await exportRes.json()) as {
+        data: {
+          workouts: Array<{ title: string; userId: string }>;
+        };
+      };
+
+      expect(body.data.workouts.length).toBeGreaterThanOrEqual(1);
+      const exportWorkout = body.data.workouts.find((w) => w.title === 'Export Test Workout');
+      expect(exportWorkout).toBeDefined();
+      expect(exportWorkout!.userId).toBe(userId);
+    });
+  });
 });

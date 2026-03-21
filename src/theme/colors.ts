@@ -7,8 +7,8 @@ export const colors = {
 
   // Text
   textPrimary: '#F0F0F0',
-  textSecondary: '#A0A0A0',
-  textTertiary: '#707070',
+  textSecondary: '#B0B0B0',
+  textTertiary: '#8A8A8A',
   textInverse: '#0D0D0D',
 
   // Accent
@@ -32,7 +32,7 @@ export const colors = {
   hrZone5: '#F87171', // Peak (red)
 
   // Voice coach states
-  voiceIdle: '#707070',
+  voiceIdle: '#8A8A8A',
   voiceListening: '#4ADE80',
   voiceProcessing: '#FBBF24',
   voiceSpeaking: '#60A5FA',

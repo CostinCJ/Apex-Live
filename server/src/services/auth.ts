@@ -68,21 +68,29 @@ export async function createTokenPair(userId: string, email: string): Promise<To
 }
 
 export async function rotateRefreshToken(oldToken: string): Promise<TokenPair | null> {
-  const stored = await prisma.refreshToken.findUnique({ where: { token: hashToken(oldToken) } });
+  const hashedToken = hashToken(oldToken);
 
-  if (!stored || stored.expiresAt < new Date()) {
-    // Token invalid or expired — revoke all tokens for this user if stolen
-    if (stored) {
-      await prisma.refreshToken.deleteMany({ where: { userId: stored.userId } });
+  // Use a serializable transaction to prevent TOCTOU race on concurrent refresh requests
+  const result = await prisma.$transaction(async (tx) => {
+    const stored = await tx.refreshToken.findUnique({ where: { token: hashedToken } });
+
+    if (!stored) return null;
+
+    if (stored.expiresAt < new Date()) {
+      // Expired token reuse — revoke all tokens for this user (theft detection)
+      await tx.refreshToken.deleteMany({ where: { userId: stored.userId } });
+      return null;
     }
-    return null;
-  }
 
-  // Delete old token (single use)
-  await prisma.refreshToken.delete({ where: { id: stored.id } });
+    // Delete the old token atomically (single-use enforcement)
+    await tx.refreshToken.delete({ where: { id: stored.id } });
 
-  // Fetch user
-  const user = await prisma.user.findUnique({ where: { id: stored.userId } });
+    return { userId: stored.userId };
+  });
+
+  if (!result) return null;
+
+  const user = await prisma.user.findUnique({ where: { id: result.userId } });
   if (!user) return null;
 
   return createTokenPair(user.id, user.email);

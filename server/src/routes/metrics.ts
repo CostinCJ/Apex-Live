@@ -2,7 +2,7 @@ import { Router, type Request, type Response } from 'express';
 import { z } from 'zod';
 import { prisma } from '../config/database.js';
 import { requireAuth, getUserId } from '../middleware/auth.js';
-import { param } from '../middleware/params.js';
+import { uuidParam } from '../middleware/params.js';
 
 export const metricsRouter = Router();
 metricsRouter.use(requireAuth);
@@ -69,16 +69,33 @@ metricsRouter.post('/batch', async (req: Request, res: Response) => {
 metricsRouter.get('/workout/:workoutId', async (req: Request, res: Response) => {
   const userId = getUserId(req);
   const metricType = req.query.type as string | undefined;
+  const VALID_METRIC_TYPES = [
+    'heart_rate', 'calories', 'distance', 'pace', 'speed',
+    'cadence', 'power', 'elevation', 'rep_count', 'weight', 'rpe',
+  ];
+
+  if (metricType && !VALID_METRIC_TYPES.includes(metricType)) {
+    res.status(400).json({ error: `Invalid metric type. Allowed: ${VALID_METRIC_TYPES.join(', ')}` });
+    return;
+  }
+
+  const workoutId = uuidParam(req, res, 'workoutId');
+  if (!workoutId) return;
 
   const where: Record<string, unknown> = {
-    workoutId: param(req, 'workoutId'),
+    workoutId,
     userId,
   };
   if (metricType) where.metricType = metricType;
 
+  const limit = Math.min(Number(req.query.limit) || 5000, 10000);
+  const offset = Number(req.query.offset) || 0;
+
   const data = await prisma.workoutMetric.findMany({
     where,
     orderBy: { recordedAt: 'asc' },
+    take: limit,
+    skip: offset,
   });
 
   res.json({ data });

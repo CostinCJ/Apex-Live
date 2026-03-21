@@ -5,6 +5,7 @@ import { colors } from '@/theme/colors';
 import { spacing, touchTarget, borderRadius } from '@/theme/spacing';
 import { typography } from '@/theme/typography';
 import type { ExerciseRecord } from '@/types/workout';
+import { useSettingsStore } from '@/stores/settingsStore';
 
 interface WorkoutSummaryProps {
   duration: number; // seconds
@@ -39,7 +40,9 @@ export function WorkoutSummary({
   caloriesBurned,
   onDone,
 }: WorkoutSummaryProps) {
-  const totalVolume = calculateTotalVolume(exercises, 'lbs');
+  const units = useSettingsStore((s) => s.units);
+  const weightUnit = units === 'imperial' ? 'lbs' : 'kg';
+  const totalVolume = calculateTotalVolume(exercises, weightUnit);
   const totalSets = countTotalSets(exercises);
   const exercisesCompleted = exercises.filter((e) => e.sets.length > 0).length;
 

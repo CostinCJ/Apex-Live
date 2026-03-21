@@ -11,6 +11,15 @@ const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'staging', 'production']).default('development'),
   CORS_ORIGIN: z.string().default('http://localhost:8081'),
   OPENAI_API_KEY: z.string().default(''),
+  // Email (optional in dev — emails log to stderr)
+  EMAIL_FROM: z.string().default(''),
+  EMAIL_PROVIDER: z.enum(['sendgrid', 'resend', 'ses', '']).default(''),
+  EMAIL_API_KEY: z.string().default(''),
+  // App URL for email links
+  APP_URL: z.string().default('https://apexlive.app'),
+  // RevenueCat
+  REVENUECAT_API_KEY: z.string().default(''),
+  REVENUECAT_WEBHOOK_SECRET: z.string().default(''),
 });
 
 export type Env = z.infer<typeof envSchema>;

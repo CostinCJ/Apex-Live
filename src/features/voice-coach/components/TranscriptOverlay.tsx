@@ -15,26 +15,33 @@ interface TranscriptOverlayProps {
   visible: boolean;
 }
 
+const MAX_TRANSCRIPT_LINES = 100;
+
 export const TranscriptOverlay = memo(function TranscriptOverlay({ lines, visible }: TranscriptOverlayProps) {
   const scrollRef = useRef<ScrollView>(null);
 
+  // Cap displayed lines to prevent unbounded memory growth
+  const displayLines = lines.length > MAX_TRANSCRIPT_LINES
+    ? lines.slice(-MAX_TRANSCRIPT_LINES)
+    : lines;
+
   useEffect(() => {
-    if (scrollRef.current && lines.length > 0) {
+    if (scrollRef.current && displayLines.length > 0) {
       scrollRef.current.scrollToEnd({ animated: true });
     }
-  }, [lines.length]);
+  }, [displayLines.length]);
 
-  if (!visible || lines.length === 0) return null;
+  if (!visible || displayLines.length === 0) return null;
 
   return (
-    <View style={styles.container}>
+    <View style={styles.container} accessibilityRole="summary" accessibilityLiveRegion="polite" accessibilityLabel="Conversation transcript">
       <ScrollView
         ref={scrollRef}
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {lines.map((line, index) => (
+        {displayLines.map((line, index) => (
           <View
             key={`${line.timestamp}-${index}`}
             style={[

@@ -21,6 +21,7 @@ interface AuthFormProps {
   onSubmit: (email: string, password: string) => void;
   onSwitchMode: () => void;
   onClearError: () => void;
+  onForgotPassword?: () => void;
 }
 
 export function AuthForm({
@@ -30,6 +31,7 @@ export function AuthForm({
   onSubmit,
   onSwitchMode,
   onClearError,
+  onForgotPassword,
 }: AuthFormProps) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -53,9 +55,24 @@ export function AuthForm({
       return;
     }
 
-    if (password.length < 6) {
-      setLocalError('Password must be at least 6 characters');
+    if (password.length < 8) {
+      setLocalError('Password must be at least 8 characters');
       return;
+    }
+
+    if (mode === 'register') {
+      if (!/[A-Z]/.test(password)) {
+        setLocalError('Password must contain at least one uppercase letter');
+        return;
+      }
+      if (!/[a-z]/.test(password)) {
+        setLocalError('Password must contain at least one lowercase letter');
+        return;
+      }
+      if (!/[0-9]/.test(password)) {
+        setLocalError('Password must contain at least one digit');
+        return;
+      }
     }
 
     onSubmit(email.trim(), password);
@@ -123,6 +140,17 @@ export function AuthForm({
             editable={!loading}
           />
         </View>
+
+        {/* Forgot Password */}
+        {mode === 'login' && onForgotPassword ? (
+          <Pressable
+            style={styles.forgotButton}
+            onPress={onForgotPassword}
+            accessibilityRole="button"
+          >
+            <Text style={styles.forgotText}>Forgot password?</Text>
+          </Pressable>
+        ) : null}
 
         {/* Confirm Password */}
         {mode === 'register' ? (
@@ -286,6 +314,16 @@ const styles = StyleSheet.create({
     ...typography.button,
     color: colors.background,
     fontSize: 18,
+  },
+  forgotButton: {
+    alignSelf: 'flex-end',
+    marginBottom: spacing.sm,
+    marginTop: -spacing.xs,
+    padding: spacing.xs,
+  },
+  forgotText: {
+    ...typography.caption,
+    color: colors.primary,
   },
   switchButton: {
     marginTop: spacing.xl,

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { View, Text, ScrollView, StyleSheet, Pressable } from 'react-native';
+import { View, Text, ScrollView, StyleSheet, Pressable, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '@/theme/colors';
@@ -55,6 +55,7 @@ export default function ProgressScreen() {
   const [timeRange, setTimeRange] = useState<TimeRange>('30d');
   const [summaries, setSummaries] = useState<DailySummary[]>([]);
   const [records, setRecords] = useState<PersonalRecord[]>([]);
+  const [loading, setLoading] = useState(true);
 
   const fetchData = useCallback(async () => {
     if (!user) return;
@@ -74,6 +75,7 @@ export default function ProgressScreen() {
 
     setSummaries(summaryResult.data?.data ?? []);
     setRecords(recordsResult.data?.data ?? []);
+    setLoading(false);
   }, [user, timeRange]);
 
   useEffect(() => {
@@ -117,6 +119,17 @@ export default function ProgressScreen() {
     const m = Math.floor((seconds % 3600) / 60);
     return h > 0 ? `${h}h ${m}m` : `${m}m`;
   };
+
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={styles.loadingText}>Loading progress...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -213,6 +226,8 @@ export default function ProgressScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
+  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: spacing.md },
+  loadingText: { ...typography.body, color: colors.textSecondary },
   scrollContent: { padding: spacing.lg },
   title: { ...typography.title, color: colors.textPrimary, marginBottom: spacing.lg },
   rangeRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.xl },

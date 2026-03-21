@@ -82,10 +82,27 @@ usersRouter.delete('/me', async (req: Request, res: Response) => {
 
 usersRouter.get('/me/export', async (req: Request, res: Response) => {
   const userId = getUserId(req);
+  const MAX_EXPORT_ROWS = 10000;
 
-  const data = await prisma.$queryRaw`
-    SELECT export_user_data(${userId}::uuid) as data
-  `;
+  const [user, workouts, personalRecords, dailySummaries, conversations] = await Promise.all([
+    prisma.user.findUnique({ where: { id: userId }, omit: { passwordHash: true } }),
+    prisma.workout.findMany({ where: { userId }, take: MAX_EXPORT_ROWS }),
+    prisma.personalRecord.findMany({ where: { userId }, take: MAX_EXPORT_ROWS }),
+    prisma.dailyWorkoutSummary.findMany({ where: { userId }, take: MAX_EXPORT_ROWS }),
+    prisma.coachConversation.findMany({
+      where: { userId },
+      include: { messages: true },
+      take: MAX_EXPORT_ROWS,
+    }),
+  ]);
 
-  res.json({ data: (data as Array<{ data: unknown }>)[0]?.data });
+  res.json({
+    data: {
+      user,
+      workouts,
+      personal_records: personalRecords,
+      daily_summaries: dailySummaries,
+      conversations,
+    },
+  });
 });

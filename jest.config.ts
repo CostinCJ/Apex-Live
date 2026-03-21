@@ -13,6 +13,8 @@ const config: Config = {
     '^@stores/(.*)$': '<rootDir>/src/stores/$1',
     '^@utils/(.*)$': '<rootDir>/src/utils/$1',
     '^@types/(.*)$': '<rootDir>/src/types/$1',
+    // Strip .js extensions from server ESM-style imports
+    '^(\\.{1,2}/.*)\\.js$': '$1',
   },
   transform: {
     '^.+\\.tsx?$': ['ts-jest', { tsconfig: 'tsconfig.json' }],
