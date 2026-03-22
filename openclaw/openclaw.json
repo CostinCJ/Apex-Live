@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "apex-fitness": {
+      "command": "npx",
+      "args": ["tsx", "server/src/mcp/index.ts"],
+      "cwd": "${workspaceFolder}",
+      "env": {
+        "DATABASE_URL": "${DATABASE_URL}"
+      }
+    }
+  }
+}
