@@ -1,3 +1,6 @@
+// MCP uses stdio for JSON-RPC — suppress ALL stdout output (Prisma logs, console.log, etc.)
+process.env.MCP_MODE = '1';
+
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { prisma } from '../config/database.js';

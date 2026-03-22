@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { View, Text, StyleSheet, Pressable, Alert, ScrollView, BackHandler } from 'react-native';
+import { View, Text, StyleSheet, Alert, ScrollView, BackHandler } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useKeepAwake } from 'expo-keep-awake';
@@ -10,42 +10,25 @@ import { typography } from '@/theme/typography';
 import { useRealtimeStore } from '@/stores/realtimeStore';
 import { useWorkoutStore } from '@/stores/workoutStore';
 import { triggerHaptic } from '@/utils/haptics';
-import { startBackgroundKeepAlive, stopBackgroundKeepAlive } from '@/services/voice/BackgroundKeepAlive';
 import { useAnimatedTimer } from '@/features/workout/hooks/useAnimatedTimer';
-import { useVoiceCoach } from '@/features/voice-coach/hooks/useVoiceCoach';
-import { VoiceOrb } from '@/features/voice-coach/components/VoiceOrb';
-import { VoiceControls } from '@/features/voice-coach/components/VoiceControls';
-import { TranscriptOverlay } from '@/features/voice-coach/components/TranscriptOverlay';
 import { SetTracker } from '@/features/workout/components/SetTracker';
 import { RestTimer } from '@/features/workout/components/RestTimer';
 import { WorkoutTimer } from '@/features/workout/components/WorkoutTimer';
 import { WorkoutBottomControls } from '@/features/workout/components/WorkoutBottomControls';
 import { ExerciseHeader } from '@/features/workout/components/ExerciseHeader';
-import { VoiceErrorBoundary } from '@/components/VoiceErrorBoundary';
 import { HealthErrorBoundary } from '@/components/HealthErrorBoundary';
 import { endWorkout, abandonWorkout, getMetricsSyncService } from '@/features/workout/services/workoutLifecycle';
 import { useHealthData } from '@/features/health/hooks/useHealthData';
 import { useOfflineWorkout } from '@/features/workout/hooks/useOfflineWorkout';
 import { WorkoutSummary } from '@/features/workout/components/WorkoutSummary';
-import { saveConversation } from '@/features/voice-coach/services/conversationSync';
-import { useAuthContext } from '@/features/auth/context/AuthContext';
 import { useSettingsStore } from '@/stores/settingsStore';
 import type { SetRecord, ExerciseRecord } from '@/types/workout';
-
-interface TranscriptLine {
-  text: string;
-  role: 'user' | 'coach';
-  timestamp: number;
-}
 
 export default function ActiveWorkoutScreen() {
   useKeepAwake();
 
   useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const { user } = useAuthContext();
-  const [transcriptLines, setTranscriptLines] = useState<TranscriptLine[]>([]);
-  const [showTranscript, setShowTranscript] = useState(true);
   const [showSummary, setShowSummary] = useState(false);
   const [summaryData, setSummaryData] = useState<{
     duration: number;
@@ -71,7 +54,7 @@ export default function ActiveWorkoutScreen() {
   const resumeWorkout = useWorkoutStore((s) => s.resumeWorkout);
   const [showRestTimer, setShowRestTimer] = useState(false);
 
-  // Health data pipeline
+  // Health data pipeline — captures wearable data and pushes to server
   const { requestAndStart: startHealthData, stop: stopHealthData } = useHealthData();
 
   // Offline detection
@@ -90,7 +73,7 @@ export default function ActiveWorkoutScreen() {
             { text: 'Leave', style: 'destructive', onPress: () => router.back() },
           ],
         );
-        return true; // prevent default back
+        return true;
       }
       return false;
     });
@@ -101,29 +84,16 @@ export default function ActiveWorkoutScreen() {
   const { start: startTimer, stop: stopTimer } = useAnimatedTimer();
   const elapsedSeconds = useRealtimeStore((s) => s.elapsedSeconds);
 
-  const {
-    connectionState,
-    coachState,
-    isListening,
-    lastTranscript,
-    lastCoachMessage,
-    connect,
-    disconnect,
-    toggleListening,
-  } = useVoiceCoach();
-
-  // Start timer, health data, and background keepalive on mount
+  // Start timer and health data on mount
   useEffect(() => {
     setTimerRunning(true);
     startTimer();
-    void startBackgroundKeepAlive();
     void startHealthData();
     triggerHaptic('voice_activated');
 
     return () => {
       setTimerRunning(false);
       stopTimer();
-      void stopBackgroundKeepAlive();
       void stopHealthData();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- stable refs, runs once
@@ -139,7 +109,7 @@ export default function ActiveWorkoutScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- stable refs
   }, [status]);
 
-  // Feed health metrics to metrics sync service
+  // Stream health metrics to server (real-time relay to OpenClaw)
   useEffect(() => {
     const service = getMetricsSyncService();
     if (!service || !workoutId) return;
@@ -169,32 +139,6 @@ export default function ActiveWorkoutScreen() {
       });
     }
   }, [caloriesBurned, workoutId]);
-
-  // Transcript tracking
-  useEffect(() => {
-    if (lastTranscript) {
-      setTranscriptLines((prev) => {
-        const next = [...prev, { text: lastTranscript, role: 'user' as const, timestamp: Date.now() }];
-        return next.length > 100 ? next.slice(-100) : next;
-      });
-    }
-  }, [lastTranscript]);
-
-  useEffect(() => {
-    if (lastCoachMessage) {
-      setTranscriptLines((prev) => {
-        const last = prev[prev.length - 1];
-        if (last?.role === 'coach') {
-          return [...prev.slice(0, -1), { ...last, text: lastCoachMessage }];
-        }
-        const next = [
-          ...prev,
-          { text: lastCoachMessage, role: 'coach' as const, timestamp: Date.now() },
-        ];
-        return next.length > 100 ? next.slice(-100) : next;
-      });
-    }
-  }, [lastCoachMessage]);
 
   const handleCompleteSet = useCallback((set: SetRecord) => {
     completeSet(set);
@@ -229,31 +173,14 @@ export default function ActiveWorkoutScreen() {
           onPress: async () => {
             triggerHaptic('workout_complete');
 
-            // Snapshot data for summary BEFORE endWorkout resets state
             const state = useWorkoutStore.getState();
             const snapExercises = [...state.exercises];
             const snapDuration = Math.floor(state.getElapsedMs() / 1000);
             const snapCalories = useRealtimeStore.getState().caloriesBurned;
-            const snapWorkoutId = state.workoutId;
 
             await endWorkout();
-            await disconnect();
             void stopHealthData();
 
-            // Save coaching conversation
-            if (transcriptLines.length > 0 && user?.id) {
-              void saveConversation(
-                user.id,
-                snapWorkoutId,
-                transcriptLines.map((l) => ({
-                  role: l.role === 'coach' ? 'assistant' as const : 'user' as const,
-                  content: l.text,
-                  timestamp: l.timestamp,
-                })),
-              );
-            }
-
-            // Show summary instead of navigating away
             setSummaryData({
               duration: snapDuration,
               exercises: snapExercises,
@@ -265,7 +192,7 @@ export default function ActiveWorkoutScreen() {
         },
       ],
     );
-  }, [disconnect, resetRealtime, transcriptLines, user, stopHealthData]);
+  }, [resetRealtime, stopHealthData]);
 
   const handleAbandon = useCallback(() => {
     Alert.alert(
@@ -278,14 +205,13 @@ export default function ActiveWorkoutScreen() {
           style: 'destructive',
           onPress: async () => {
             await abandonWorkout();
-            await disconnect();
             resetRealtime();
             router.back();
           },
         },
       ],
     );
-  }, [disconnect, resetRealtime, router]);
+  }, [resetRealtime, router]);
 
   // Show workout summary after completion
   if (showSummary && summaryData) {
@@ -312,6 +238,12 @@ export default function ActiveWorkoutScreen() {
         </View>
       ) : null}
 
+      {/* OpenClaw relay indicator */}
+      <View style={styles.relayBadge}>
+        <Ionicons name="radio" size={14} color={colors.primary} />
+        <Text style={styles.relayText}>Streaming to OpenClaw</Text>
+      </View>
+
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
         <ExerciseHeader
           exerciseName={currentExercise?.exerciseName}
@@ -323,7 +255,7 @@ export default function ActiveWorkoutScreen() {
 
         <WorkoutTimer elapsedSeconds={elapsedSeconds} isPaused={status === 'paused'} />
 
-        {/* Health metrics */}
+        {/* Health metrics from wearables */}
         <HealthErrorBoundary>
           <View style={styles.metricsRow}>
             <View
@@ -368,29 +300,6 @@ export default function ActiveWorkoutScreen() {
             onSkip={handleRestComplete}
           />
         ) : null}
-
-        {/* Voice coach */}
-        <VoiceErrorBoundary>
-          <Pressable
-            style={styles.voiceArea}
-            onPress={() => setShowTranscript((prev) => !prev)}
-            accessibilityRole="button"
-            accessibilityLabel="Toggle transcript"
-          >
-            <VoiceOrb state={coachState} size={64} />
-          </Pressable>
-
-          <TranscriptOverlay lines={transcriptLines} visible={showTranscript} />
-
-          <VoiceControls
-            connectionState={connectionState}
-            coachState={coachState}
-            isListening={isListening}
-            onConnect={connect}
-            onDisconnect={disconnect}
-            onToggleListening={toggleListening}
-          />
-        </VoiceErrorBoundary>
       </ScrollView>
 
       <WorkoutBottomControls
@@ -415,8 +324,6 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
     paddingBottom: spacing.xl,
   },
-
-  // Metrics
   metricsRow: {
     flexDirection: 'row',
     gap: spacing.md,
@@ -446,15 +353,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 2,
   },
-
-  // Voice
-  voiceArea: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: spacing.xxl,
-    marginBottom: spacing.xl,
-  },
-
   offlineBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -468,6 +366,21 @@ const styles = StyleSheet.create({
   offlineText: {
     ...typography.caption,
     color: colors.warning,
+    fontWeight: '600',
+  },
+  relayBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: colors.primary + '15',
+    paddingVertical: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.primary + '30',
+  },
+  relayText: {
+    ...typography.caption,
+    color: colors.primary,
     fontWeight: '600',
   },
 });
